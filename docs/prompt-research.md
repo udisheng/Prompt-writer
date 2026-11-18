@@ -770,3 +770,20 @@ When the user later says "go," these research points should drive the product, n
 - https://openrouter.ai/docs/guides/features/compatibility
 - https://docs.ollama.com/api/chat
 - https://docs.ollama.com/api/openai-compatibility
+
+---
+
+## 8. Field notes: Seedream in practice
+
+These are not from ByteDance's documentation. They come from generating hundreds of story-scene pictures with Seedream 5.0 (with one reference photo per character) in a story app, and from what went wrong there. They sit on top of section 4, not in place of it.
+
+- **Labelled lines are fine.** `Action:` / `Subjects:` / `Outfits:` / `Background:` / `Lighting:` / `Camera:` / `Style:`, each a full sentence or two, read as natural language to Seedream and are much easier for a person to edit than one paragraph. Tag soup inside a line is still tag soup.
+- **Lead with the action.** Prompts that spend their words on how people look (face, hair, body) come back as posed portraits and lose the event. Put the moment first: who does what, to whom.
+- **One pose per person.** Several actions in one picture ("turns, waves, picks up the cup") merge bodies, tangle limbs and add hands. Pick one moment, place both hands or frame them out, and prefer a close-up or half-body shot when the hands do not matter.
+- **Do not re-describe referenced faces.** When a person has a reference photo, describing their face or hair in words pulls the result away from the photo. Bind by number ("the woman from Image 1") and describe pose, action and clothes only.
+- **A portrait reference brings its clothes along.** Unless the prompt names the scene's outfit in words and says it replaces the photo's clothes, Seedream copies the photo's clothes, including modern clothes into a period scene. State the era for everyone ("Tang-dynasty hanfu, no modern clothes").
+- **One reference per person.** Extra photos of the same person cost more on most hosts and did not improve likeness.
+- **First-person point of view.** "First-person point of view" with the viewer out of frame (hands at most) works. Naming the viewer ("seen through Mara's eyes") does not help: the model does not know who that is and sometimes draws them.
+- **Say the time and light from the scene.** "Late night, lantern light" beats "cinematic lighting", which drifts to golden hour.
+- **No text unless asked.** Ending the style with "No text, captions or watermarks." stops stray captions on story scenes.
+- **Video (Seedance) is stricter still.** A busy clip prompt is where people merge most. One simple movement per clip, at most two people moving, no "then", and well under 100 words worked far better than a detailed paragraph.

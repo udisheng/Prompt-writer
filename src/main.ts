@@ -33,8 +33,8 @@ const HINTS: Record<string, string> = {
   "seedance-1.0": "Subject plus action. Scene changes use “camera/scene switch”. Duration is a trailing --duration flag.",
   "seedance-2.0": "Shot 1, Shot 2, one camera move each. Bind references as @Image 1. Do not use timestamps.",
   "seedance-2.5": "Asset map, summary, timestamped shots, and constants. Clips can run up to 30 seconds.",
-  "seedream-generate": "Subject, action, environment, then style and light. On-image text goes in double quotes.",
-  "seedream-edit": "Name what changes and what must stay unchanged. Keep it short.",
+  "seedream-generate": "Labelled lines: Action, Subjects, Outfits, Background, Lighting, Camera, Style. One pose per person. On-image text goes in double quotes.",
+  "seedream-edit": "Name what changes and what must stay unchanged. Keep faces unchanged. Keep it short.",
 };
 
 const ui = {
