@@ -423,12 +423,25 @@ mod tests {
                     assert!(body.contains("600"));
                     assert!(body.contains("300"));
                     assert_eq!(template.max_words, Some(600));
+                    // field notes: labelled lines, one pose each, references bind by number, POV, era
+                    for label in ["action:", "subjects:", "outfits:", "background:", "lighting:", "camera:", "style:"] {
+                        assert!(body.contains(label), "seedream-generate is missing the {label} line");
+                    }
+                    assert!(body.contains("one pose and one main action per person"));
+                    assert!(body.contains("both hands"));
+                    assert!(body.contains("do not re-describe the face"));
+                    assert!(body.contains("first-person point of view"));
+                    assert!(body.contains("do not name the viewer"));
+                    assert!(body.contains("no modern clothes"));
+                    assert!(body.contains("no text, captions or watermarks"));
                 }
                 "seedream-edit" => {
                     assert!(body.contains("unchanged"));
                     assert!(body.contains("double quote"));
                     assert!(body.contains("999"));
                     assert_eq!(template.max_words, Some(600));
+                    assert!(body.contains("face and identity unchanged"));
+                    assert!(body.contains("one thing about a person"));
                 }
                 other => panic!("unexpected template {other}"),
             }

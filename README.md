@@ -190,19 +190,37 @@ Natural environmental audio only, including wind, rustling grass, and the soft p
 
 File: `core/templates/seedream-generate.md`.
 
-For Seedream 4.0, 4.5, or 5.x: a short natural-language prompt, not a comma-separated tag stack. A use goes first when there is one (poster, logo, product photo, infographic, UI, storyboard). Then subject and action, environment, and style or light. Every string that must appear in the image is in double quotes, verbatim, with its position. A series or an exact count is how 4.0, 4.5, and 5.0 lite ask for several outputs. The longer 3.0 form is used only when the idea says 3.0.
+For Seedream 4.0, 4.5, or 5.x: short, precise natural language, not a comma-separated tag stack, in about 80 to 200 words. The prompt comes back as labelled lines so each part is easy to find and edit. Each line holds one or two full sentences, and a line with nothing to say is left out:
+
+`Purpose:` · `Action:` · `Subjects:` · `Outfits:` · `Background:` · `Lighting:` · `Camera:` · `Text:` · `Style:`
+
+That keeps the official order: a use first when there is one (poster, logo, product photo, infographic, UI, storyboard), then subject and action, environment, and style or light. Every string that must appear in the image is in double quotes, verbatim, with its position. A series or an exact count is how 4.0, 4.5, and 5.0 lite ask for several outputs. The longer 3.0 form is used only when the idea says 3.0.
+
+The template also carries field notes from drawing story scenes with Seedream (see [`docs/prompt-research.md`](docs/prompt-research.md#8-field-notes-seedream-in-practice)):
+
+- **One pose and one main action per person**, with both hands placed or out of frame. Stacked actions merge bodies and add limbs.
+- **Reference images bind by number** ("the woman from Image 1"). Their faces, hair and bodies are not re-described, and a portrait supplies the face only: the scene's outfit is written in words.
+- **First-person point of view** keeps the viewer out of the picture and never names them.
+- **Era and costume** are stated for everyone ("no modern clothes" for a historical setting).
+- Unless the idea asks for writing, the Style line ends with "No text, captions or watermarks."
 
 Shape example from the template:
 
 ```text
-Design a product poster for a ceramic coffee company. A handmade red ceramic mug with a slightly uneven glaze sits on a weathered oak table, steam curling through warm morning light from a window on the left. Food photography, shallow depth of field, soft side light. The poster title is "First Batch", and a small caption at the bottom reads "Roasted at dawn". Clean editorial layout with space at the top for the title. No extra logos.
+Purpose: A product poster for a ceramic coffee company.
+Action: A handmade red ceramic mug with a slightly uneven glaze sits on a weathered oak table, steam curling from it.
+Background: A quiet kitchen counter with a window on the left and an empty wall behind.
+Lighting: Warm morning light from the window on the left, soft shadows to the right.
+Camera: Close three-quarter view at table height, shallow depth of field.
+Text: The poster title "First Batch" sits at the top, and a small caption "Roasted at dawn" sits at the bottom.
+Style: Food photography, clean editorial layout with space at the top for the title. No extra logos.
 ```
 
 ### Seedream · Edit
 
 File: `core/templates/seedream-edit.md`.
 
-One or two sentences. Start with add, remove, replace, or modify. Name the target by appearance, position, or role. State the end result and what stays unchanged (pose, identity, background, typography, layout). New words that must appear go in double quotes.
+One or two sentences. Start with add, remove, replace, or modify. Name the target by appearance, position, or role. State the end result and what stays unchanged (pose, identity, background, typography, layout). New words that must appear go in double quotes. An edit that touches a person keeps their face and identity unchanged and changes one thing about them per sentence; a new outfit, pose and place in one edit tend to change the face too.
 
 On Seedream 5.0 pro or flash, a point is `x y` and a box is `x1 y1 x2 y2`, normalized from 0 to 999, with `0 0` at the top left. The template's example of that form is `Replace the person on the left in Image 1 120 180 640 760 with a robot.`
 
