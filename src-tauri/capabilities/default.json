@@ -1,0 +1,33 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Prompt Rewriter overlay window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize",
+    "core:window:allow-start-dragging",
+    "core:window:allow-is-visible",
+    "core:event:allow-listen",
+    "allow-get-settings",
+    "allow-save-settings",
+    "allow-set-openrouter-key",
+    "allow-clear-openrouter-key",
+    "allow-list-backend-models",
+    "allow-list-templates",
+    "allow-read-template",
+    "allow-save-template",
+    "allow-reset-template",
+    "allow-open-templates-dir",
+    "allow-hide-window",
+    "allow-show-window",
+    "allow-rewrite",
+    "allow-list-history",
+    "allow-delete-history-entry",
+    "allow-clear-history"
+  ]
+}

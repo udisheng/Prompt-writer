@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <title>Prompt Rewriter</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="titlebar" data-tauri-drag-region>
+        <div class="brand" data-tauri-drag-region>
+          <span class="mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 7h9" />
+              <path d="M4 12h16" />
+              <path d="M4 17h9" />
+              <path d="M16 4.5 20.5 8 16 11.5" />
+            </svg>
+          </span>
+          <div data-tauri-drag-region>
+            <strong data-tauri-drag-region>Prompt Rewriter</strong>
+            <small data-tauri-drag-region>Always on top</small>
+          </div>
+        </div>
+        <nav class="views" aria-label="Sections">
+          <button type="button" data-view="compose" class="active">Compose</button>
+          <button type="button" data-view="history">History</button>
+          <button type="button" data-view="settings">Settings</button>
+        </nav>
+        <button type="button" id="hide-btn" title="Hide (Esc)">Hide</button>
+      </header>
+
+      <p id="desktop-note" class="note" hidden>
+        This browser view is a layout preview. Model calls, the tray, and the global hotkey run in the desktop app.
+      </p>
+      <p id="banner" class="banner" role="alert" hidden></p>
+
+      <main>
+        <section id="view-compose">
+          <div class="target-row">
+            <label class="field grow">
+              <span>Target model</span>
+              <select id="family"></select>
+            </label>
+            <div id="variant-wrap" class="field">
+              <span id="variant-label">Mode</span>
+              <div id="variants" class="segment" role="group"></div>
+            </div>
+          </div>
+          <div id="duration-wrap" class="field" hidden>
+            <span>Duration</span>
+            <div class="inline">
+              <input id="duration" type="number" min="4" max="15" step="1" inputmode="numeric" />
+              <span class="hint" id="duration-hint">seconds, 4–15</span>
+            </div>
+          </div>
+          <p id="mode-hint" class="hint"></p>
+
+          <label class="field">
+            <span class="row-label">
+              Rough idea
+              <em id="idea-count">0</em>
+            </span>
+            <textarea id="idea" rows="5" maxlength="8000" placeholder="A rain-soaked courier pauses under a neon bakery sign, then sprints across the empty street."></textarea>
+          </label>
+
+          <div class="action-row">
+            <button type="button" id="rewrite" class="primary">Rewrite</button>
+            <span class="hint">Ctrl+Enter</span>
+          </div>
+
+          <section class="output-card">
+            <div class="row-label">
+              <span id="output-label">Prompt</span>
+              <em id="output-count" class="count">—</em>
+            </div>
+            <textarea id="output" rows="8" readonly placeholder="The rewritten prompt will land here."></textarea>
+            <div class="copy-row">
+              <button type="button" id="copy-output" class="ghost">Copy</button>
+            </div>
+          </section>
+
+          <section id="negative-card" class="output-card" hidden>
+            <div class="row-label">
+              <span>Negative prompt</span>
+              <em id="negative-count" class="count">—</em>
+            </div>
+            <textarea id="negative" rows="3" readonly placeholder="Wan's negative prompt will land here."></textarea>
+            <div class="copy-row">
+              <button type="button" id="copy-negative" class="ghost">Copy negative</button>
+              <button type="button" id="copy-both" class="ghost">Copy both</button>
+            </div>
+          </section>
+          <ul id="warnings" class="warnings"></ul>
+        </section>
+
+        <section id="view-history" hidden>
+          <div class="section-head">
+            <div>
+              <h2>Recent rewrites</h2>
+              <p class="hint">The last 50 stay on this machine. Click one to put it back in Compose.</p>
+            </div>
+            <button type="button" id="clear-history" class="ghost">Clear</button>
+          </div>
+          <div id="history-empty" class="empty">
+            No rewrites yet. A finished prompt will be kept here with the idea that produced it.
+          </div>
+          <div id="history-list" class="history-list"></div>
+        </section>
+
+        <section id="view-settings" hidden>
+          <h2>Settings</h2>
+          <fieldset class="field">
+            <legend>Backend</legend>
+            <div class="radios">
+              <label><input type="radio" name="backend" value="openrouter" /> OpenRouter</label>
+              <label><input type="radio" name="backend" value="ollama" /> Ollama</label>
+            </div>
+          </fieldset>
+
+          <div class="panel">
+            <h3>OpenRouter</h3>
+            <label class="field">
+              <span>API key</span>
+              <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="sk-or-…" />
+            </label>
+            <div class="copy-row">
+              <button type="button" id="save-key" class="ghost">Save key</button>
+              <button type="button" id="clear-key" class="ghost">Clear key</button>
+            </div>
+            <p id="key-status" class="hint"></p>
+            <label class="field">
+              <span>Model id</span>
+              <div class="inline">
+                <input id="or-model" list="or-models" spellcheck="false" placeholder="anthropic/claude-sonnet-4.5 or a :free model" />
+                <button type="button" id="or-refresh" class="ghost">Refresh</button>
+              </div>
+              <datalist id="or-models"></datalist>
+            </label>
+            <p id="or-model-status" class="hint"></p>
+          </div>
+
+          <div class="panel">
+            <h3>Ollama</h3>
+            <label class="field">
+              <span>Base URL</span>
+              <input id="ollama-url" spellcheck="false" placeholder="http://localhost:11434" />
+            </label>
+            <label class="field">
+              <span>Model</span>
+              <div class="inline">
+                <input id="ollama-model" list="ollama-models" spellcheck="false" placeholder="llama3.2" />
+                <button type="button" id="ollama-refresh" class="ghost">Refresh</button>
+              </div>
+              <datalist id="ollama-models"></datalist>
+            </label>
+            <p id="ollama-status" class="hint"></p>
+          </div>
+
+          <div class="panel">
+            <h3>Overlay</h3>
+            <label class="field">
+              <span>Global hotkey</span>
+              <div class="inline">
+                <input id="hotkey" spellcheck="false" placeholder="Ctrl+Shift+Space" />
+                <button type="button" id="record-hotkey" class="ghost">Record</button>
+              </div>
+            </label>
+            <p id="hotkey-status" class="hint"></p>
+            <label class="field">
+              <span>Default target</span>
+              <select id="default-template"></select>
+            </label>
+            <label class="field">
+              <span>Temperature <em id="temp-value">0.4</em></span>
+              <input id="temperature" type="range" min="0" max="2" step="0.1" />
+            </label>
+            <button type="button" id="save-settings" class="primary">Save settings</button>
+          </div>
+
+          <div class="panel">
+            <h3>Prompt templates</h3>
+            <p class="hint" id="templates-path"></p>
+            <div class="copy-row">
+              <button type="button" id="open-templates" class="ghost">Open folder</button>
+            </div>
+            <label class="field">
+              <span>File</span>
+              <select id="template-file"></select>
+            </label>
+            <textarea id="template-editor" rows="12" spellcheck="false"></textarea>
+            <div class="copy-row">
+              <button type="button" id="save-template" class="ghost">Save template</button>
+              <button type="button" id="reset-template" class="ghost">Reset to default</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

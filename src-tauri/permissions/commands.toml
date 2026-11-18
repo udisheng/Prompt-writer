@@ -1,0 +1,79 @@
+[[permission]]
+identifier = "allow-get-settings"
+description = "Read Prompt Rewriter settings."
+commands.allow = ["get_settings"]
+
+[[permission]]
+identifier = "allow-save-settings"
+description = "Save Prompt Rewriter settings."
+commands.allow = ["save_settings"]
+
+[[permission]]
+identifier = "allow-set-openrouter-key"
+description = "Store the OpenRouter API key."
+commands.allow = ["set_openrouter_key"]
+
+[[permission]]
+identifier = "allow-clear-openrouter-key"
+description = "Remove the OpenRouter API key."
+commands.allow = ["clear_openrouter_key"]
+
+[[permission]]
+identifier = "allow-list-backend-models"
+description = "List OpenRouter or Ollama models."
+commands.allow = ["list_backend_models"]
+
+[[permission]]
+identifier = "allow-list-templates"
+description = "List prompt templates."
+commands.allow = ["list_templates"]
+
+[[permission]]
+identifier = "allow-read-template"
+description = "Read a prompt template."
+commands.allow = ["read_template"]
+
+[[permission]]
+identifier = "allow-save-template"
+description = "Save a prompt template."
+commands.allow = ["save_template"]
+
+[[permission]]
+identifier = "allow-reset-template"
+description = "Reset a prompt template."
+commands.allow = ["reset_template"]
+
+[[permission]]
+identifier = "allow-open-templates-dir"
+description = "Open the templates folder."
+commands.allow = ["open_templates_dir"]
+
+[[permission]]
+identifier = "allow-hide-window"
+description = "Hide the overlay."
+commands.allow = ["hide_window"]
+
+[[permission]]
+identifier = "allow-show-window"
+description = "Show the overlay."
+commands.allow = ["show_window"]
+
+[[permission]]
+identifier = "allow-rewrite"
+description = "Rewrite an idea into a model prompt."
+commands.allow = ["rewrite"]
+
+[[permission]]
+identifier = "allow-list-history"
+description = "List rewrite history."
+commands.allow = ["list_history"]
+
+[[permission]]
+identifier = "allow-delete-history-entry"
+description = "Delete one history entry."
+commands.allow = ["delete_history_entry"]
+
+[[permission]]
+identifier = "allow-clear-history"
+description = "Clear rewrite history."
+commands.allow = ["clear_history"]
