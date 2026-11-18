@@ -1,42 +1,352 @@
 # Prompt Rewriter
 
-A small always-on-top desktop overlay. Type a rough idea, pick a generation model, and it rewrites the idea into that model's prompt format. The rewrite is done by an LLM on OpenRouter or a local Ollama server. HTTP calls are made from the Rust side.
+Prompt Rewriter is a small always-on-top desktop overlay. You type a rough idea, pick a video or image model, and an LLM rewrites the idea into that model's prompt format.
 
-Targets:
+Video and image models do not share a prompt shape. Wan 2.2 wants a short cinematic paragraph plus a negative prompt. MiniMax H3 wants labelled shots, a soundscape, and a score inside a 4–15 second timeline. Seedance 1.0, 2.0, and 2.5 each use a different shot syntax. Seedream wants a short natural-language image prompt, with edits named as a change plus what must stay. Pasting one loose sentence into all of them drops the details those models actually follow. The overlay stays above the generator you are using, so the rewrite is a copy away.
 
-- **Wan 2.2** text-to-video and image-to-video, with a separate negative prompt
-- **MiniMax H3**, 4–15 seconds
-- **Seedance** 1.0, 2.0, and 2.5, with a duration (2.5 up to 30 seconds)
-- **Seedream** generate and edit
+The app does not call Wan, MiniMax, Seedance, or Seedream. The rewrite itself is a chat completion sent to [OpenRouter](https://openrouter.ai/) or a local [Ollama](https://ollama.com/) server. HTTP runs in Rust. The window is a Tauri 2 shell. The published installer is the Windows one.
 
-## Run it in development
+The prompt rules come from the research in [`docs/prompt-research.md`](docs/prompt-research.md) (17 November 2026). Each target is a markdown template under `core/templates/`.
 
-You need Node 22, Rust stable, and a WebView.
+## Features
 
-```bash
-npm install
-npm test          # rewriter pipeline tests, no GUI
-npm run tauri dev # overlay window
+- **Global hotkey overlay.** Default chord is **Ctrl+Shift+Space**. It shows or hides a borderless window that is always on top and skipped on the taskbar (460×760, minimum 380×560). **Esc** or **Hide** hides it. **Ctrl+Enter** rewrites.
+- **System tray.** Left-click toggles the window. The menu is Show / Hide, Settings, and Quit. Quit is the way to exit. A second launch focuses the window that is already running.
+- **Two rewrite backends.** OpenRouter, or Ollama on your machine. Both go through one OpenAI-compatible chat client. The request sets `"stream": false`.
+- **Eight targets.**
+  - Wan 2.2 text-to-video and image-to-video
+  - MiniMax H3 (4–15 seconds)
+  - Seedance 1.0, 2.0 (4–15 seconds), and 2.5 (4–30 seconds)
+  - Seedream generate and edit
+- **Wan returns two fields.** A positive prompt and a separate negative prompt, with their own limits.
+- **Per-model limits.** Character and word caps live in each template's frontmatter. The overlay counts the result and turns the count light red when a cap is crossed. The prompt is still shown and saved.
+- **History.** The last 50 rewrites stay on this machine. Click a row to put it back into Compose, or copy it.
+- **Settings.** Backend, model id, Ollama URL, hotkey, default target, and temperature (0 to 2, default 0.4).
+- **OS keychain for the OpenRouter API key.** Windows Credential Manager, macOS Keychain, or the Linux secret service. The key is not written into `settings.json`. If the keychain cannot be used, the key falls back to a private file.
+
+## Prompt formats
+
+Compose groups the eight templates into four families. The hint under the picker is a one-line reminder. The full rules are the template body, which is sent as the system message. `{{duration}}` and `{{duration_clock}}` are filled in before that send for MiniMax H3 and Seedance. The clock form is `00:06.000` for 6 seconds, and it is replaced first so `{{duration}}` does not eat it.
+
+The samples below are the shape examples inside the template files (and the research those lines were taken from). They show the format. They are not a claim about what a particular OpenRouter model will return for a new idea.
+
+Limits in the table are the frontmatter the running app enforces. "API truncation" means the provider guide says text past that length is cut. "Quality budget" means the provider guide says extra length drops details. The word warning in the app still reads "word model limit" whenever `max_words` is crossed.
+
+| Template | Output | What the app enforces | Where the number comes from |
+| --- | --- | --- | --- |
+| `wan22-t2v` | positive + negative | 800 characters positive, 500 characters negative | API truncation. The template also aims for about 60–200 words; that band is not a separate counter. |
+| `wan22-i2v` | positive + negative | 100 words and 800 characters positive, 500 characters negative | 100 words from the official I2V rewriter; 800 / 500 are API truncation. |
+| `minimax-h3` | one prompt | 7,000 characters. Duration 4–15 seconds. | API character cap. |
+| `seedance-1.0` | one prompt | 1,000 words. Duration 4–15 seconds. | Quality budget: 1,000 English words or 500 Chinese characters. Only the word cap is in frontmatter. |
+| `seedance-2.0` | one prompt | 1,000 words. Duration 4–15 seconds. | Same Seedance quality budget. |
+| `seedance-2.5` | one prompt | 1,000 words. Duration 4–30 seconds. | Same word budget. 30 seconds is the 2.5 duration ceiling. |
+| `seedream-generate` | one prompt | 600 words | Quality budget: 600 English words or 300 Chinese characters. Only the word cap is in frontmatter. |
+| `seedream-edit` | one prompt | 600 words | Same Seedream budget. The template tells the model to stay shorter than a full generation prompt. |
+
+Counts are Unicode scalar values (`"字".chars().count()` is 1), which matches the Wan guide's rule that each Chinese character or Latin letter counts as one. Words are whitespace-separated. There is no separate Chinese-character counter for Seedance or Seedream.
+
+### Wan 2.2 · Text to video
+
+File: `core/templates/wan22-t2v.md`.
+
+One paragraph, in the idea's language (Chinese or English), in this order:
+
+1. A named style only when the idea already names one. It goes first.
+2. Entity: the subject that is already in the idea, with concrete appearance.
+3. Scene: environment, foreground, and background.
+4. Motion, including amplitude, speed, and effect. A still idea gets a small plausible action.
+5. At most four aesthetic choices (time of day, light, color, shot size, angle, composition, lens, one camera move). A still camera is the phrase `fixed camera`.
+
+The template is written for Wan 2.2. It leaves out the voice, sound-effect, and BGM formulas used by Wan 2.5 and later. Negatives stay in the negative field.
+
+The model is asked to return only:
+
+```json
+{"positive":"...","negative":"..."}
 ```
 
-The default hotkey is **Ctrl+Shift+Space**. Esc hides the window. Quit from the system tray. Closing the window hides it; it does not exit.
+Shape example from the template:
 
-On Linux, install the Tauri system libraries first:
+```text
+Warm colors, side lighting, medium close-up, center composition. A young woman with wavy auburn hair in a vintage floral dress stands at a rain-streaked cafe window at dusk. Behind her, brass lamps and wooden tables recede into a softly blurred interior. She slowly lifts a ceramic cup, turns her head toward the glass, and exhales a faint thread of steam. The camera pushes in gently. Live-action, soft practical tungsten light mixed with cool blue residual daylight.
+```
+
+A negative list starts from the short official set (`low resolution, error, worst quality, low quality, deformed, extra fingers, bad proportions`) and adds only artifacts this idea needs. It stays at or under 500 characters.
+
+### Wan 2.2 · Image to video
+
+File: `core/templates/wan22-i2v.md`.
+
+The still already defines the subject, the scene, and the style. The positive prompt is motion, then one camera behavior, in 100 words or fewer and 800 characters or fewer. A camera that should hold still includes the exact phrase `fixed camera`. A change over time is allowed in sequence (`Camera pushes in, then holds a fixed camera.`). Several moves in the same moment are out.
+
+Shape example from the template:
+
+```text
+The woman slowly turns her head toward the window and smiles. Steam drifts from the cup. Camera pushes in, then holds a fixed camera.
+```
+
+When the positive prompt says `fixed camera`, the negative list excludes camera shake and extra camera moves. The same JSON pair is required. This app does not upload the still. The template tells the rewriter that the picture already exists.
+
+### MiniMax H3
+
+File: `core/templates/minimax-h3.md`. Variant `t2va`.
+
+The clip length is the duration you set (default in the overlay is 6 seconds, allowed range 4–15). The prompt must stay under 7,000 characters. Three fields, labels exact, separated by a blank line:
+
+```text
+integrated_multimodal_description: [Shot 1] ...
+
+overall_soundscape: ...
+
+non_diegetic_music: ...
+```
+
+`[Shot 1]` opens with style and composition and has no timestamp. Later shots use `[Shot N]` and a cut time inside the duration, for example `[Shot 2] At 00:03.500, the camera cuts to ...`. Camera moves are natural English sentences (`The camera pushes in with small amplitude at slow speed toward the folded letter.`), not Hailuo 02 / 2.3 / T2V-01-Director bracket commands such as `[Pan left]`. Spoken words stay verbatim inside `<d>[Language] ...</d>`, with a stable speaker id such as `(S1)`. On-screen text stays in double quotes and is not translated.
+
+`overall_soundscape` is ambience and physical sound, one to four sentences. `non_diegetic_music` is score the characters cannot hear, or `N/A`. There is no negative-prompt field.
+
+If the idea describes an existing first frame, last frame, or both, the template adds a picture-alignment line (`<Picture 1>`, `Picture 2`) before the three fields. The app still does not upload those pictures.
+
+Shape example from the template, written for a duration whose cut time fits:
+
+```text
+integrated_multimodal_description: [Shot 1] Live-action, cinematic, a medium-wide shot frames a baker opening the shutters of a small street bakery before sunrise. The camera pushes in with small amplitude at slow speed as the middle-aged baker with a calm, slightly raspy voice (S1) places a fresh loaf on the wooden counter and says: <d>[English] First batch of the morning.</d> [Shot 2] At 00:05.000, the camera cuts to a close-up of steam rising from the sliced bread while the baker's final words carry over from the previous shot.
+
+overall_soundscape: Wooden shutters scrape open, followed by the soft thud of a loaf on the counter and a faint hiss of steam. Distant early-morning traffic stays in the background.
+
+non_diegetic_music: A sparse acoustic guitar figure at a slow tempo, fading under the close-up.
+```
+
+### Seedance 1.0
+
+File: `core/templates/seedance-1.0.md`.
+
+Subject plus action, then the scene, one camera move, and a style only when the idea needs them. Several actions stay in time order (`then`). A scene change uses the phrase `camera/scene switch`, or `Switch to a medium shot:`, or `The camera switches to...`. This version does not use `Shot 1` numbering or timestamps, and it does not add Seedance 2.5's `No subtitles` / `No BGM` closer.
+
+Flags sit after the prose. The prompt ends with `--duration` and the chosen length. `--camerafixed true` is added only when the camera must stay locked. A named resolution can be `--resolution 1080p`.
+
+Shape example from the template (the file uses `5` as a sample; the system prompt substitutes the duration you picked):
+
+```text
+The ship cuts through the storm as lightning repeatedly splits the night sky. Switch to a medium shot: a captain stands on the deck, holding a vintage telescope and gazing into the distance. The camera slowly pushes forward as he stows the telescope, his expression resolute as he looks ahead.
+--duration 5
+```
+
+### Seedance 2.0
+
+File: `core/templates/seedance-2.0.md`.
+
+Engineering-style shots, not timestamps. Seedance 2.0 does not reliably follow ranges such as `0-3 seconds`. The template uses `Shot 1`, `Shot 2`, `Shot 3`, and lets the model pace them across the chosen duration (4–15 seconds).
+
+Each shot is one camera move or transition, then action and expression, then spatial change, then audio. References bind by upload order: `@Image 1`, `@Video 1`, `@Audio 1`. The closer uses the wordings the template lists: `keep it subtitle-free`, `avoid generating any text or subtitles`, `do not generate a logo`, `do not generate a watermark`. There is no separate negative field.
+
+Shape example from the template:
+
+```text
+Shot 1: Side shot of a street alley; the man slowly starts running, with a sense of rapid breathing.
+Shot 2: The man knocks over a fruit stand; the camera shakes quickly and gives a close-up of the man's frightened face.
+Shot 3: The man climbs over a low wall and disappears; the camera slowly pulls back and freezes on the empty street.
+```
+
+The template points out that Shot 2 in that official sample stacks a shake and a close-up, and tells the rewriter to keep a single camera move per shot.
+
+### Seedance 2.5
+
+File: `core/templates/seedance-2.5.md`.
+
+Timestamps are in this version. The template asks for four blocks:
+
+```text
+Asset map:
+Image 1: ...
+No reference assets.
+
+Summary:
+<one sentence: subject, location, event, style, overall camera>
+
+Shots:
+Shot 1 (0-3s): <visuals, one camera move, action, dialogue, sound>
+Shot 2 (3-8s): ...
+
+Constants:
+No subtitles.
+No BGM; generate only environmental sounds and action sounds.
+```
+
+Ranges use 1-second steps, stay continuous, and the last range ends at the chosen duration (4–30 seconds). Other accepted time forms include `0-3 seconds` and `At the 5-second mark`. Each shot still gets one camera move. An edit uses words such as add, remove, replace, or change, and says what stays. There is no separate negative field. Sound control is the `No BGM` line, or `No audio.` when the idea wants silence.
+
+Shape example included in the template (fit the ranges to the duration you set; the instructions also ask for the Asset map, Summary, Shots, and Constants headings):
+
+```text
+Realistic nature documentary style, natural lighting and shadows. On a warm afternoon, on a grassy slope in the forest, a chubby panda cub rolls down the hill.
+
+0s-3s: A panda cub lies on a green grassy slope and begins to slowly roll sideways down the slope. Sunlight filters through the trees from the upper left.
+3s-8s: The panda rolls toward the lower right, stops, shifts onto its belly, turns its face toward the camera, and makes a soft humming sound.
+
+Natural environmental audio only, including wind, rustling grass, and the soft plop of the panda rolling. No subtitles. No BGM.
+```
+
+### Seedream · Generate
+
+File: `core/templates/seedream-generate.md`.
+
+For Seedream 4.0, 4.5, or 5.x: a short natural-language prompt, not a comma-separated tag stack. A use goes first when there is one (poster, logo, product photo, infographic, UI, storyboard). Then subject and action, environment, and style or light. Every string that must appear in the image is in double quotes, verbatim, with its position. A series or an exact count is how 4.0, 4.5, and 5.0 lite ask for several outputs. The longer 3.0 form is used only when the idea says 3.0.
+
+Shape example from the template:
+
+```text
+Design a product poster for a ceramic coffee company. A handmade red ceramic mug with a slightly uneven glaze sits on a weathered oak table, steam curling through warm morning light from a window on the left. Food photography, shallow depth of field, soft side light. The poster title is "First Batch", and a small caption at the bottom reads "Roasted at dawn". Clean editorial layout with space at the top for the title. No extra logos.
+```
+
+### Seedream · Edit
+
+File: `core/templates/seedream-edit.md`.
+
+One or two sentences. Start with add, remove, replace, or modify. Name the target by appearance, position, or role. State the end result and what stays unchanged (pose, identity, background, typography, layout). New words that must appear go in double quotes.
+
+On Seedream 5.0 pro or flash, a point is `x y` and a box is `x1 y1 x2 y2`, normalized from 0 to 999, with `0 0` at the top left. The template's example of that form is `Replace the person on the left in Image 1 120 180 640 760 with a robot.`
+
+Shape example from the template:
+
+```text
+Dress the tallest panda in pink Peking Opera costume and headgear, keeping its pose unchanged.
+```
+
+The source image is not attached. The prompt has to name the change clearly enough to apply to whatever image you already have in the Seedream UI.
+
+## Architecture
+
+```text
+overlay (src/, Vite + TypeScript)
+    invoke()  →  Tauri commands (src-tauri/)
+                    files, keychain, hotkey, tray
+                         ↓
+                  rewriter-core (core/)
+                    templates, settings, history, HTTP
+                         ↓
+              OpenRouter or Ollama chat completions
+```
+
+The window asks Rust to call the provider. The saved key stays in the Rust process. Settings receives only whether a key is configured, and the password field is cleared after **Save key**. `src/api.ts` is a thin `invoke` wrapper. Outside the desktop shell (plain `npm run dev`) it shows a layout preview with fake model lists and does not send a request. A note at the top of that preview says so.
+
+`src-tauri` owns the process:
+
+- `src/lib.rs` starts the window, seeds files, registers the hotkey, installs the tray, and turns a close request into hide.
+- `src/commands.rs` is the command surface: settings, key, model lists, templates, rewrite, history.
+- `src/secrets.rs` talks to the OS keychain (`keyring`, service `com.promptrewriter.app`, account `openrouter`).
+- `src/files.rs` reads and writes the config folder.
+- `src/window.rs` parses shortcuts, toggles the window, and builds the tray menu.
+
+`rewriter-core` is a plain library with no GUI. On rewrite it:
+
+1. Trims the idea and rejects an empty idea or one longer than 8,000 characters.
+2. Loads `{id}.md` from the config templates folder (and writes the bundled copy if that file is missing).
+3. Checks duration: MiniMax H3 and Seedance 1.0 / 2.0 are 4–15 seconds, Seedance 2.5 is 4–30, and Wan and Seedream ignore duration.
+4. Renders the system prompt and a user message that names the target, the duration when there is one, and the rough idea.
+5. Builds a chat request and posts it. Timeout is 10 seconds to connect and 120 seconds overall. The user agent is `PromptRewriter/0.1`.
+6. Parses the reply, measures it against the template caps, prepends a history entry, and returns the text.
+
+Wan replies are parsed as JSON (`positive` / `positive_prompt` / `prompt`, and `negative` / `negative_prompt`), including a fenced block or a JSON object wrapped in prose. A `POSITIVE:` / `NEGATIVE:` or `---POSITIVE---` / `---NEGATIVE---` split is the fallback. If that fails, the raw reply is placed in the positive box with the warning "Could not split a positive and negative prompt. The raw reply is in the positive box." Other targets return the prompt text, with a markdown fence removed if the model added one.
+
+### Where files live
+
+Tauri's app config directory for identifier `com.promptrewriter.app`. Settings shows the path this machine is actually using.
+
+| OS | Typical config folder |
+| --- | --- |
+| Windows | `%APPDATA%\com.promptrewriter.app` |
+| Linux | `~/.config/com.promptrewriter.app` |
+| macOS | `~/Library/Application Support/com.promptrewriter.app` |
+
+| File | Role |
+| --- | --- |
+| `settings.json` | Backend, model ids, Ollama URL, hotkey, default template, temperature. No API key. |
+| `history.json` | `{ "entries": [ ... ] }`, newest first, capped at 50. |
+| `openrouter.key` | Fallback only, when the OS keychain cannot store the key. Mode `0600` on Unix. |
+| `templates/*.md` | The templates the running app reads. |
+
+A `settings.json` or `history.json` that does not parse is renamed to the same name plus `.bak`, and the app continues with defaults or an empty history.
+
+### Editing templates
+
+On first launch, each bundled file is copied into `templates/` if that name is not already there. Later launches leave your edits in place. An updated install does not overwrite a template you have already customized.
+
+Change a live template in either place:
+
+- **Settings → Prompt templates.** Pick the file, edit, **Save template**. The next rewrite uses it. The frontmatter `id` has to match the file. A template larger than 100,000 characters is rejected.
+- **Open folder**, then edit the markdown in any editor.
+
+**Reset to default** writes that one file back from the copy compiled into the binary (`include_dir` on `core/templates/`). Changing the bundled default means editing `core/templates/*.md` and rebuilding. Reset after that rebuild picks up the new bundled text. Until you reset, the config-folder copy remains the one that runs.
+
+Frontmatter the parser accepts:
+
+```yaml
+---
+id: wan22-t2v          # must match the file name; letters, digits, . _ -
+family: wan22
+variant: t2v
+title: Wan 2.2 · Text to video
+max_chars: 800         # optional
+max_chars_kind: model  # model (default) or suggested
+max_words: 100         # optional
+negative_max_chars: 500
+output: wan_pair       # wan_pair or text
+---
+```
+
+`max_chars_kind: model` labels the counter "limit" and the warning "model limit". `suggested` labels them "suggested" and "suggested length". None of the bundled files set `suggested`. Seedance and Seedream express their budget with `max_words` only. Crossing `max_chars` or `max_words` sets `overLimit`, adds a warning, and turns the count light red (`#ff9b9b`). Crossing 90% of `max_chars` turns it amber. The text is still kept.
+
+`{{duration}}` becomes the number of seconds. `{{duration_clock}}` becomes `00:SS.000` (seconds are capped at 59 in the clock string). Put the clock placeholder in the template yourself if you add a new file that needs it.
+
+## Requirements (Windows)
+
+The installer targets Windows. To build it locally you need:
+
+1. **Node.js 22.** That is the version [`.github/workflows/windows.yml`](.github/workflows/windows.yml) uses. This repo's frontend build was run on Node 22.
+2. **Rust stable via [rustup](https://rustup.rs/).** `rust-toolchain.toml` selects the `stable` channel. The crates use Rust edition 2024, so the toolchain has to be recent enough for that edition. Install the MSVC target that rustup selects by default on Windows (`stable-x86_64-pc-windows-msvc`).
+3. **Microsoft C++ Build Tools.** Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the **Desktop development with C++** workload. Tauri links the native shell with the MSVC toolchain.
+4. **WebView2.** Windows 11 usually already has the Evergreen runtime. The NSIS bundle is configured with `webviewInstallMode: downloadBootstrapper` (silent), so the installer downloads the bootstrapper when the runtime is missing. You still want the runtime installed for `tauri dev`.
+
+The NSIS package installs for the current user (`installMode: currentUser`), so the setup executable does not ask for an administrator prompt.
+
+On Debian or Ubuntu, compiling the same shell for a local run needs the Tauri 2 WebKitGTK libraries:
 
 ```bash
 sudo apt install libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libgtk-3-dev
 ```
 
+That Linux build is a native binary. It does not produce the Windows installer.
+
+## Develop
+
+```bash
+npm install
+npm test            # rewriter-core tests, no window
+npm run tauri dev   # overlay on http://127.0.0.1:1420
+```
+
+`npm run dev` alone is the Vite layout preview on port 1420. Model calls, the tray, and the global hotkey run under `npm run tauri dev`.
+
+The default hotkey is **Ctrl+Shift+Space**. If another app already owns it, the window still opens from the tray, and Settings shows the registration error.
+
+## Tests
+
+`npm test` runs `cargo test --manifest-path core/Cargo.toml`. The 21 tests in `rewriter-core` cover:
+
+- bundled templates still contain each model's format rules
+- request URLs, bodies, and headers for OpenRouter and Ollama
+- API keys stay out of the JSON body and out of `Debug` output
+- a mock HTTP round-trip: render a Wan template, POST a chat completion, parse positive and negative
+- a rejected API key, a missing model, Ollama not running, and a delimiter-formatted Wan reply
+- history capped at 50
+- the key file created mode `0600` on Unix
+- duration bounds, frontmatter parsing, and secret redaction
+
+The Tauri crate has one extra test that only checks hotkey string parsing. `npm test` does not build the GUI crate.
+
 ## Build the Windows installer
 
-The installer is an NSIS `.exe` and a WiX `.msi`. This repository cannot cross-compile that bundle from Linux. Use a Windows machine, or the GitHub Actions workflow [`.github/workflows/windows.yml`](.github/workflows/windows.yml), which runs on `windows-latest` for pushes to `main`, version tags, and manual runs. Download the `prompt-rewriter-windows` artifact. A tagged push also creates a GitHub release.
-
-On a Windows PC:
-
-1. Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) with the **Desktop development with C++** workload.
-2. Install [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/). The NSIS installer also downloads the Evergreen bootstrapper if WebView2 is missing. Windows 11 usually already has it.
-3. Install [rustup](https://rustup.rs/) (the `stable` MSVC toolchain) and Node 22.
-4. In this repo:
+### On a Windows machine
 
 ```bash
 npm install
@@ -44,101 +354,141 @@ npm test
 npm run tauri build
 ```
 
-The installers are written to:
+`tauri.conf.json` runs `npm run build` first (`tsc` and Vite). Installers land in:
 
-- `src-tauri/target/release/bundle/nsis/` — setup `.exe` (current user, no admin prompt)
+- `src-tauri/target/release/bundle/nsis/` — setup `.exe` (current user)
 - `src-tauri/target/release/bundle/msi/` — `.msi`
 
-The build is not code-signed. Windows SmartScreen will warn until the binary is signed.
+The build is not code-signed. Windows SmartScreen warns on an unsigned setup executable until the binary is signed.
 
-`npm run tauri build` on Linux produces a native Linux binary instead, once the WebKit packages above are installed. That confirms the app compiles. It does not produce the Windows installer.
+### GitHub Actions
 
-## Settings
+[`.github/workflows/windows.yml`](.github/workflows/windows.yml) is named **Windows installer**. It runs on a push to `main`, on a tag that starts with `v`, and from **Run workflow**.
 
-Open **Settings** in the overlay, or choose Settings from the tray menu.
+1. **Core tests** on `ubuntu-latest`: `cargo test --manifest-path core/Cargo.toml`.
+2. **MSI and NSIS** on `windows-latest`, after tests pass. It installs Node 22, installs npm dependencies, and runs `tauri-apps/tauri-action@v0` with `--bundles nsis,msi`.
+3. The installers are uploaded as the artifact **`prompt-rewriter-windows`**. The job fails if those files are missing. Download it from the workflow run.
 
-| Setting | Notes |
-| --- | --- |
-| Backend | OpenRouter or Ollama |
-| OpenRouter API key | Stored in the OS keychain (Windows Credential Manager, macOS Keychain, or Linux secret service). It is not written into `settings.json` and is redacted from errors. If the keychain is unavailable, the key is stored in a private file (`openrouter.key`, mode `0600` on Unix) in the config folder. |
-| OpenRouter model | Refresh loads `https://openrouter.ai/api/v1/models`. You can still type any model id. |
-| Ollama URL | Default `http://localhost:11434`. Refresh reads `/api/tags`. |
-| Hotkey | Default `Ctrl+Shift+Space`. Record listens for the next chord. |
-| Default target | Used the next time the overlay opens. |
-| Temperature | `0` to `2`, sent with the chat request. |
+The workflow does not configure a signing certificate. Those artifacts are unsigned, and SmartScreen applies the same warning as a local build.
 
-Both backends use one OpenAI-compatible client:
+A push of a `v*` tag also lets `tauri-action` create a GitHub Release for that tag (`permissions: contents: write` is set for this). The Actions artifact is still uploaded on that run.
 
-- OpenRouter: `POST https://openrouter.ai/api/v1/chat/completions`
-- Ollama: `POST {base}/v1/chat/completions`
+## Configuration
 
-A missing key, a rejected key, a missing model, and a refused Ollama connection each surface as their own message.
+Open **Settings** in the overlay, or choose Settings from the tray. **Save settings** writes `settings.json` and re-registers the hotkey. A hotkey that fails to register leaves the previous chord in place.
 
-## Prompt templates
+| Setting | Default | Notes |
+| --- | --- | --- |
+| Backend | OpenRouter | `openrouter` or `ollama` |
+| OpenRouter API key | empty | Keychain, or `openrouter.key` if the keychain is unavailable. One token, no spaces, 8–512 characters. The field is cleared after a successful save. |
+| OpenRouter model | empty | You have to choose one. **Refresh** loads `https://openrouter.ai/api/v1/models`. Free models (prompt price 0) are marked and listed first. You can still type any model id. The placeholder text in the box is only an example of the id shape. |
+| Ollama URL | `http://localhost:11434` | Must be `http` or `https`. **Refresh** reads `{origin}/api/tags`. |
+| Ollama model | empty | Type a name or pick one from Refresh. The placeholder `llama3.2` is not a default. |
+| Hotkey | `Ctrl+Shift+Space` | **Record** listens for the next chord. Hold Ctrl, Alt, Shift, or the Windows key (saved as `Super`), then the main key. Esc cancels recording and leaves the window open. |
+| Default target | Wan 2.2 text to video | Used the next time the overlay opens. |
+| Temperature | 0.4 | Slider from 0 to 2 in steps of 0.1. Values are clamped to 0–2. |
 
-Each target has a markdown file with a short frontmatter block and a system prompt. On first launch the app copies the bundled files into the config folder and reads them from there after that. Edit the copies when a model's guide changes. You do not need to recompile. **Reset to default** in Settings restores the bundled text for one file. **Open folder** opens the directory in the system file manager.
+Saved settings look like this:
 
-Typical locations (Settings shows the real path):
-
-- Windows: `%APPDATA%\com.promptrewriter.app\templates`
-- Linux: `~/.config/com.promptrewriter.app/templates`
-- macOS: `~/Library/Application Support/com.promptrewriter.app/templates`
-
-Frontmatter keys:
-
-```yaml
----
-id: wan22-t2v          # must match the file name
-family: wan22
-variant: t2v
-title: Wan 2.2 · Text to video
-max_chars: 800
-max_chars_kind: model  # model or suggested
-max_words: 100         # optional
-negative_max_chars: 500
-output: wan_pair       # wan_pair or text
----
+```json
+{
+  "backend": "openrouter",
+  "openrouterModel": "example/model",
+  "ollamaBaseUrl": "http://localhost:11434",
+  "ollamaModel": "",
+  "hotkey": "Ctrl+Shift+Space",
+  "defaultTemplateId": "wan22-t2v",
+  "temperature": 0.4
+}
 ```
 
-`{{duration}}` and `{{duration_clock}}` are replaced for MiniMax H3 and Seedance. Replace `{{duration_clock}}` yourself if you add it; the app substitutes the clock form first so it is not eaten by `{{duration}}`.
+### OpenRouter
 
-What each bundled template asks the model to write:
+The chat call is `POST https://openrouter.ai/api/v1/chat/completions` with `Authorization: Bearer <key>`, `HTTP-Referer: https://prompt-rewriter.local`, and `X-Title: Prompt Rewriter`. The body is the model id, the clamped temperature, `"stream": false`, a system message (the rendered template), and a user message (target title, duration when the template uses one, and the idea). The key is not copied into the JSON body. Provider errors are redacted before they are shown: bearer tokens, `sk-` keys, and the saved secret become `[redacted]`.
 
-| File | Format |
+If listing models returns 401 or 403 for the saved key, the list is retried once without the key.
+
+### Ollama
+
+The chat call is `POST {origin}/v1/chat/completions`. A base URL that already ends in `/v1` keeps that prefix. No `Authorization` header is sent, even if an OpenRouter key is stored. Pull models with the Ollama CLI (`ollama pull <name>`), then Refresh.
+
+Start the server with `ollama serve` when the app reports that Ollama is not running. The URL in that message is the base URL from Settings.
+
+## Troubleshooting
+
+| What you see | What it means |
 | --- | --- |
-| `wan22-t2v.md` | Entity, scene, motion, aesthetic control. Positive prompt ≤ 800 characters. Negative prompt ≤ 500. JSON `{"positive","negative"}`. |
-| `wan22-i2v.md` | Motion and one camera behavior only. The exact phrase `fixed camera` when the camera is still. ≤ 100 words and ≤ 800 characters. |
-| `minimax-h3.md` | `integrated_multimodal_description`, `overall_soundscape`, `non_diegetic_music`, `[Shot N]`, natural-language camera moves, timeline inside 4–15 seconds, under 7000 characters. |
-| `seedance-1.0.md` | Subject + action. Scene changes use `camera/scene switch`. Duration is a trailing `--duration` flag. Does not use the 2.5 "No subtitles / No BGM" closer. |
-| `seedance-2.0.md` | `Shot 1`, `Shot 2`, … One camera move per shot. No timestamps. References use `@Image 1`. Constraints are subtitle-free, no logo, no watermark. |
-| `seedance-2.5.md` | Asset map, one-sentence summary, integer-second shots, constants including `No subtitles` and `No BGM`. Up to 30 seconds. |
-| `seedream-generate.md` | Purpose, then subject, action, environment, style and light. On-image text in double quotes. About 300 Chinese characters or 600 English words. |
-| `seedream-edit.md` | Names the edit target and what stays unchanged. On-image text in double quotes. Seedream 5.0 pro/flash can take `0`–`999` coordinates. |
+| Add an OpenRouter API key in Settings. | Backend is OpenRouter and no key is stored. |
+| Paste the API key as a single token, with no spaces. | The key was empty, contained whitespace, or was shorter than 8 or longer than 512 characters. |
+| OpenRouter rejected the API key. | The provider returned 401 or 403. |
+| Choose a model in Settings. | The model box for the selected backend is empty. |
+| OpenRouter does not have model `…`. | The id was rejected as unknown. Pick another id. |
+| Could not reach OpenRouter. | The connection failed. |
+| Ollama is not running at `…`. | Nothing accepted the connection. Start `ollama serve`, or change the base URL. |
+| Ollama does not have model `…`. | Pull it (`ollama pull <name>`) and refresh the list. |
+| The request timed out. | No response within 120 seconds. The model may still be loading. |
+| The provider rate-limited the request. | HTTP 429. |
+| Could not register `Ctrl+Shift+Space`. Another app may already own it. | The global shortcut is taken. Settings keeps the error. The tray still opens the window. Pick another chord and save. |
+| Write an idea before rewriting. / The idea is longer than 8,000 characters. | The idea box is empty, or past the cap (`maxlength` is 8000). |
+| Duration has to be a whole number from 4 to 15 seconds. | The overlay checks the duration box before the request. Seedance 2.5 uses 4 to 30. The Rust command reports `MiniMax H3 duration must be between 4 and 15 seconds (got N).` The duration box is hidden for Wan and Seedream. |
+| Could not split a positive and negative prompt. | The Wan reply was not JSON and had no POSITIVE / NEGATIVE markers. The raw text is in the positive box. |
+| `wan22-t2v.md: frontmatter …` | That template file failed to parse. The banner lists invalid files. Fix it or use Reset to default. |
+| The prompt is N characters, over the 800 character model limit. | Shown under the result. The count is light red. The text is still there and still saved. A word warning uses the same pattern ("over the 1000 word model limit"). |
 
-Wan replies are parsed as JSON, including fenced JSON and a `POSITIVE:` / `NEGATIVE:` fallback. If the split fails, the raw reply is shown in the positive box with a warning. Other models return the prompt text only. The character count turns red when a model limit or a suggested length is exceeded. The prompt is still shown and saved.
+If Settings suddenly returns to defaults, look for `settings.json.bak` in the config folder. The previous file did not parse.
 
-Wan's 800 / 500 and H3's 7000 are API truncation limits. Seedance's 1000 English words (or 500 Chinese characters) and Seedream's 600 English words (or 300 Chinese characters) are official quality budgets, not hard cutoffs. Change the numbers in the frontmatter if a provider publishes a different cap.
+## Known limitations
 
-## History
+- Replies arrive after the model finishes. `"stream": false` is hard-coded, and the UI waits on the whole completion.
+- The overlay does not upload reference images, first frames, or audio. Image-to-video and edit templates tell the model that the picture already exists and to describe motion or the change only. `@Image 1` in a Seedance prompt is an instruction for the generator UI, not an upload from this app.
+- Closing the window, Esc, and Hide all hide to the tray. The process keeps running until **Quit** on the tray menu.
+- The global hotkey can fail when another app owns the chord. A press is also ignored if it repeats within 350 ms.
+- H3 and Seedance 1.0 / 2.0 durations are whole seconds from 4 to 15. Seedance 2.5 allows 4 to 30. Wan and Seedream have no duration control.
+- History is the last 50 rewrites on this machine, in `history.json`. There is no account sync.
+- A result that crosses a cap is still shown, copied, and stored. The app does not truncate it to the limit.
+- The Windows installers from a local build and from GitHub Actions are unsigned.
+- This repository does not cross-compile the Windows installer from Linux. Use a Windows machine or the Actions workflow.
+- The browser preview (`npm run dev` outside Tauri) does not store a real API key and does not call a model. Its template list is a stand-in for layout. Limits you see there are not the bundled frontmatter.
 
-The last 50 rewrites are stored in `history.json` in the config folder: idea, target, output, negative prompt, backend, model, and time. Click a row to restore it into Compose, or copy it. History stays on this machine.
+## Project structure
 
-## Tests
+```text
+.
+├── .github/workflows/windows.yml   # core tests, then the Windows MSI and NSIS artifact
+├── core/
+│   ├── Cargo.toml                  # rewriter-core library
+│   ├── src/
+│   │   ├── error.rs                # missing key, missing model, HTTP failures
+│   │   ├── history.rs              # last-50 list
+│   │   ├── http.rs                 # OpenRouter and Ollama client
+│   │   ├── parse.rs                # Wan JSON / markers, length checks
+│   │   ├── redact.rs               # strip secrets from errors
+│   │   ├── secret_file.rs          # private-file fallback, mode 0600
+│   │   ├── settings.rs             # defaults and temperature clamp
+│   │   └── template.rs             # frontmatter, duration, bundled files
+│   └── templates/                  # eight markdown templates compiled into the binary
+├── docs/prompt-research.md         # source research for those templates
+├── index.html                      # overlay layout
+├── package.json                    # npm test, npm run build, tauri scripts
+├── rust-toolchain.toml             # stable
+├── src/
+│   ├── api.ts                      # invoke wrappers and the browser preview
+│   ├── main.ts                     # Compose, History, Settings
+│   └── styles.css
+├── src-tauri/
+│   ├── capabilities/default.json   # which commands the window may call
+│   ├── icons/                      # window and installer icons
+│   ├── permissions/commands.toml
+│   ├── src/
+│   │   ├── commands.rs             # rewrite and settings commands
+│   │   ├── files.rs                # config folder, template seed
+│   │   ├── lib.rs                  # Tauri setup, tray, single instance
+│   │   ├── secrets.rs              # OS keychain
+│   │   └── window.rs               # hotkey, hide-on-close, tray menu
+│   ├── Cargo.toml
+│   └── tauri.conf.json             # product name, window, NSIS/WebView2
+├── tsconfig.json
+└── vite.config.ts                  # dev server on 127.0.0.1:1420
+```
 
-`npm test` runs the Rust crate `rewriter-core`. That covers:
-
-- bundled templates still contain each model's format rules
-- request URLs, bodies, and headers for OpenRouter and Ollama
-- API keys stay out of the JSON body and out of `Debug` output
-- a mock HTTP server round-trip: render a Wan template, POST a chat completion, parse positive and negative
-- bad API key, missing model, Ollama not running, and delimiter-formatted Wan output
-- history capped at 50
-- the key file is created mode `0600` on Unix
-
-## Caveats
-
-- Replies arrive after the model finishes. Token streaming is not wired up.
-- The overlay does not upload reference images. Image-to-video and edit templates tell the model that a picture already exists and to describe motion or the change only.
-- H3 and Seedance 1.0 / 2.0 durations are clamped to 4–15 seconds. Seedance 2.5 allows 4–30 seconds.
-- The global hotkey can fail if another app already owns it. Settings reports that, and the tray menu still opens the window.
-- The Windows build in GitHub Actions is unsigned.
+`npm run build` writes `dist/`, which Tauri packages. `core/target/` and `src-tauri/target/` are build output. None of those directories are part of the source.
