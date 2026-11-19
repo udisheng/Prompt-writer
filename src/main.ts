@@ -27,8 +27,8 @@ const FAMILIES = [
 ];
 
 const HINTS: Record<string, string> = {
-  "wan22-t2v": "Entity, scene, motion, and light. The positive prompt must stay within 800 characters.",
-  "wan22-i2v": "Motion and camera only. The rewrite says “fixed camera” when the shot does not move. 100 words.",
+  "wan22-t2v": "Subject, motion, then camera and light. About 80–120 words, and the positive prompt must stay within 800 characters.",
+  "wan22-i2v": "Count, motion, one camera, and what must not happen. “fixed camera” holds a still shot. 100 words.",
   "minimax-h3": "Labelled shots, a soundscape, and a score. Duration is part of the prompt, from 4 to 15 seconds.",
   "seedance-1.0": "Subject plus action. Scene changes use “camera/scene switch”. Duration is a trailing --duration flag.",
   "seedance-2.0": "Shot 1, Shot 2, one camera move each. Bind references as @Image 1. Do not use timestamps.",
@@ -61,6 +61,11 @@ const ui = {
   copyNegative: must<HTMLButtonElement>("copy-negative"),
   copyBoth: must<HTMLButtonElement>("copy-both"),
   warnings: must<HTMLUListElement>("warnings"),
+  commandHint: must<HTMLDivElement>("command-hint"),
+  protectedActions: must<HTMLDivElement>("protected-actions"),
+  appendProtected: must<HTMLButtonElement>("append-protected"),
+  keywords: must<HTMLTextAreaElement>("keywords-editor"),
+  keywordsPath: must<HTMLParagraphElement>("keywords-path"),
   historyList: must<HTMLDivElement>("history-list"),
   historyEmpty: must<HTMLDivElement>("history-empty"),
   clearHistory: must<HTMLButtonElement>("clear-history"),
@@ -91,6 +96,7 @@ const state: {
   busy: boolean;
   recording: false | ((event: KeyboardEvent) => void);
   result: RewriteResult | null;
+  commandOutput: boolean;
 } = {
   settings: null,
   templates: [],
@@ -98,7 +104,17 @@ const state: {
   busy: false,
   recording: false,
   result: null,
+  commandOutput: false,
 };
+
+const COMMANDS = [
+  { label: "/show key", detail: "List protected keywords" },
+  { label: "/add key ", detail: "Add words or phrases, separated by commas" },
+  { label: "/remove key ", detail: "Remove by text or by the number from /show key" },
+  { label: "/clear key", detail: "Ask before deleting the list" },
+  { label: "/clear key confirm", detail: "Delete every protected keyword" },
+  { label: "/help", detail: "List these commands" },
+];
 
 function must<T extends HTMLElement>(id: string): T {
   const node = document.getElementById(id);
@@ -185,6 +201,7 @@ function renderVariants() {
     button.addEventListener("click", () => {
       state.templateId = option.id;
       state.result = null;
+      state.commandOutput = false;
       ui.output.value = "";
       ui.negative.value = "";
       renderVariants();
@@ -226,10 +243,53 @@ function countText(count: number, max: number | null, kind: "model" | "suggested
   return `${count.toLocaleString()} / ${max.toLocaleString()} ${name}`;
 }
 
+function renderCommandHint() {
+  const typed = ui.idea.value.trimStart().toLowerCase();
+  ui.commandHint.replaceChildren();
+  if (!typed.startsWith("/")) {
+    ui.commandHint.hidden = true;
+    return;
+  }
+  const matches = COMMANDS.filter((command) => {
+    const label = command.label.trim().toLowerCase();
+    return label.startsWith(typed) || typed.startsWith(label);
+  });
+  ui.commandHint.hidden = matches.length === 0;
+  for (const command of matches) {
+    const button = document.createElement("button");
+    button.type = "button";
+    const name = document.createElement("strong");
+    name.textContent = command.label.trim();
+    const detail = document.createElement("span");
+    detail.textContent = command.detail;
+    button.append(name, detail);
+    button.addEventListener("click", () => {
+      ui.idea.value = command.label;
+      ui.ideaCount.textContent = String([...ui.idea.value].length);
+      renderCommandHint();
+      ui.idea.focus();
+      ui.idea.setSelectionRange(ui.idea.value.length, ui.idea.value.length);
+    });
+    ui.commandHint.append(button);
+  }
+}
+
 function renderOutput() {
   const template = templateOf(state.templateId);
   const result = state.result;
   const output = ui.output.value;
+  const missing = result?.missingProtected ?? [];
+  ui.protectedActions.hidden = missing.length === 0;
+  if (state.commandOutput) {
+    ui.outputLabel.textContent = "Keyword command";
+    ui.negativeCard.hidden = true;
+    ui.outputCount.textContent = output ? `${[...output].length.toLocaleString()} characters` : "—";
+    ui.outputCount.className = "count";
+    ui.warnings.replaceChildren();
+    return;
+  }
+  ui.negativeCard.hidden = !isWan(state.templateId);
+  ui.outputLabel.textContent = isWan(state.templateId) ? "Positive prompt" : "Prompt";
   const chars = result && result.templateId === state.templateId ? result.charCount : [...output].length;
   const words = result && result.templateId === state.templateId ? result.wordCount : output.trim().split(/\s+/).filter(Boolean).length;
   const maxChars = result?.maxChars ?? template?.maxChars ?? null;
@@ -310,7 +370,9 @@ function renderHistory(entries: HistoryEntry[]) {
         overLimit: entry.overLimit,
         warnings: entry.warnings,
         historyId: entry.id,
+        missingProtected: [],
       };
+      state.commandOutput = false;
       renderOutput();
       showView("compose");
     });
@@ -408,6 +470,60 @@ function showView(name: "compose" | "history" | "settings") {
   if (name === "history") {
     void api.listHistory().then(renderHistory).catch((error: unknown) => showBanner(errorText(error)));
   }
+  if (name === "settings") {
+    void loadKeywords();
+  }
+}
+
+async function loadKeywords() {
+  try {
+    const file = await api.getProtectedKeywords();
+    ui.keywords.value = file.text;
+    ui.keywordsPath.textContent = file.path;
+  } catch (error) {
+    showBanner(errorText(error));
+  }
+}
+
+async function runKeywordCommand(line: string) {
+  state.busy = true;
+  ui.rewrite.disabled = true;
+  ui.rewrite.textContent = "Running…";
+  try {
+    const result = await api.runKeywordCommand(line);
+    state.commandOutput = true;
+    state.result = null;
+    ui.output.value = result.message;
+    ui.negative.value = "";
+    ui.keywords.value = result.text;
+    renderOutput();
+  } catch (error) {
+    showBanner(errorText(error));
+  } finally {
+    state.busy = false;
+    ui.rewrite.disabled = false;
+    ui.rewrite.textContent = "Rewrite";
+  }
+}
+
+function appendMissingTerms() {
+  const missing = state.result?.missingProtected ?? [];
+  if (!missing.length) return;
+  const current = ui.output.value.replace(/\s+$/, "");
+  const addition = missing.join(", ");
+  const output = current ? `${current}\n${addition}` : addition;
+  ui.output.value = output;
+  if (state.result) {
+    state.result = {
+      ...state.result,
+      output,
+      charCount: [...output].length,
+      wordCount: output.trim().split(/\s+/).filter(Boolean).length,
+      missingProtected: [],
+      warnings: state.result.warnings.filter((warning) => !warning.startsWith("Protected terms missing")),
+    };
+  }
+  renderOutput();
 }
 
 async function loadTemplateEditor() {
@@ -451,6 +567,10 @@ async function rewrite() {
     ui.idea.focus();
     return;
   }
+  if (idea.startsWith("/")) {
+    await runKeywordCommand(idea);
+    return;
+  }
   const bounds = durationBounds(state.templateId);
   const duration = bounds ? Number(ui.duration.value) : null;
   if (bounds && duration != null && (!Number.isInteger(duration) || duration < bounds.min || duration > bounds.max)) {
@@ -463,6 +583,7 @@ async function rewrite() {
   document.getElementById("view-compose")?.setAttribute("aria-busy", "true");
   try {
     const result = await api.rewrite(idea, state.templateId, duration);
+    state.commandOutput = false;
     state.result = result;
     ui.output.value = result.output;
     ui.negative.value = result.negative ?? "";
@@ -565,6 +686,7 @@ async function boot() {
     showBanner(errorText(error));
   }
   renderOutput();
+  void loadKeywords();
   const footer = document.createElement("p");
   footer.id = "shortcut-footer";
   footer.className = "hint";
@@ -586,6 +708,7 @@ ui.family.addEventListener("change", () => {
   if (!family) return;
   state.templateId = family.options[0].id;
   state.result = null;
+  state.commandOutput = false;
   ui.output.value = "";
   ui.negative.value = "";
   renderVariants();
@@ -594,9 +717,18 @@ ui.family.addEventListener("change", () => {
 
 ui.idea.addEventListener("input", () => {
   ui.ideaCount.textContent = String([...ui.idea.value].length);
+  renderCommandHint();
 });
 
 ui.rewrite.addEventListener("click", () => void rewrite());
+ui.appendProtected.addEventListener("click", () => appendMissingTerms());
+document.getElementById("save-keywords")?.addEventListener("click", () => {
+  void api.saveProtectedKeywords(ui.keywords.value).then((file) => {
+    ui.keywords.value = file.text;
+    ui.keywordsPath.textContent = file.path;
+    flash("Protected keywords saved.");
+  }).catch((error: unknown) => showBanner(errorText(error)));
+});
 ui.copyOutput.addEventListener("click", () => void copyText(ui.output.value));
 ui.copyNegative.addEventListener("click", () => void copyText(ui.negative.value));
 ui.copyBoth.addEventListener("click", () => {

@@ -70,6 +70,21 @@ export interface RewriteResult {
   overLimit: boolean;
   warnings: string[];
   historyId: string;
+  missingProtected: string[];
+}
+
+export interface KeywordState {
+  text: string;
+  path: string;
+  keywords: string[];
+}
+
+export interface KeywordCommandResult {
+  handled: boolean;
+  changed: boolean;
+  message: string;
+  keywords: string[];
+  text: string;
 }
 
 export interface HistoryEntry {
@@ -98,6 +113,7 @@ export function errorText(error: unknown): string {
 }
 
 const STORAGE = "prompt-rewriter-preview";
+const KEYWORD_STORAGE = "prompt-rewriter-keywords";
 
 function previewSettings(): SettingsView {
   const saved = localStorage.getItem(STORAGE);
@@ -208,7 +224,147 @@ function previewRewrite(idea: string, templateId: string, duration: number | nul
     overLimit,
     warnings,
     historyId: entry.id,
+    missingProtected: [],
   };
+}
+
+function dedupeKeywords(keywords: string[]): string[] {
+  const out: string[] = [];
+  for (const keyword of keywords) {
+    if (keyword && !out.includes(keyword)) out.push(keyword);
+  }
+  return out;
+}
+
+function parseKeywordText(text: string): string[] {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) {
+    try {
+      const value = JSON.parse(trimmed) as unknown;
+      const items = Array.isArray(value)
+        ? value
+        : value && typeof value === "object" && "keywords" in value
+          ? (value as { keywords?: unknown }).keywords
+          : null;
+      if (Array.isArray(items)) {
+        return dedupeKeywords(
+          items
+            .filter((item): item is string => typeof item === "string")
+            .map((item) => item.trim())
+            .filter(Boolean),
+        );
+      }
+    } catch {
+      /* Fall through to lines when the file is not JSON. */
+    }
+  }
+  return dedupeKeywords(
+    text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0 && !line.startsWith("#")),
+  );
+}
+
+function formatKeywordText(keywords: string[]): string {
+  return keywords.length ? `${keywords.join("\n")}\n` : "";
+}
+
+function numberedKeywords(keywords: string[]): string {
+  if (!keywords.length) return "No protected keywords yet. Add one with /add key <word or phrase>.";
+  return ["Protected keywords:", ...keywords.map((keyword, index) => `${index + 1}. ${keyword}`)].join("\n");
+}
+
+function previewKeywordCommand(line: string): KeywordCommandResult {
+  const current = parseKeywordText(localStorage.getItem(KEYWORD_STORAGE) ?? "");
+  const trimmed = line.trim();
+  const fail = (message: string, keywords = current, changed = false): KeywordCommandResult => ({
+    handled: true,
+    changed,
+    message,
+    keywords,
+    text: formatKeywordText(keywords),
+  });
+  if (!trimmed.startsWith("/")) {
+    return { handled: false, changed: false, message: "", keywords: current, text: formatKeywordText(current) };
+  }
+  const persist = (keywords: string[]) => localStorage.setItem(KEYWORD_STORAGE, formatKeywordText(keywords));
+  const rest = trimmed.slice(1).trim();
+  const [verb = "", ...tailParts] = rest.split(/\s+/);
+  const tail = tailParts.join(" ");
+  const command = verb.toLowerCase();
+  const keyPayload = () => {
+    const [word, ...payload] = tail.split(/\s+/);
+    if (word?.toLowerCase() !== "key") return null;
+    return payload.join(" ").trim();
+  };
+  const phrases = (payload: string) => dedupeKeywords(payload.split(",").map((part) => part.trim()).filter(Boolean));
+  if (command === "help") {
+    return fail(
+      "Commands stay in this app and are not sent to the model.\n/show key — list protected keywords\n/add key <word or phrase> — add one, or several separated by commas\n/remove key <word, phrase, or number> — remove a keyword\n/clear key — ask first\n/clear key confirm — delete every protected keyword\n/help — show this list\nA keyword in the list is copied verbatim when it appears in an idea. {{double braces}} protect a term for that idea only, and the braces are left out of the rewrite.",
+    );
+  }
+  if (command === "show" && keyPayload() != null) return fail(numberedKeywords(current));
+  if (command === "add" && keyPayload() != null) {
+    const incoming = phrases(keyPayload() ?? "");
+    if (!incoming.length) return fail("Name a word or phrase after /add key. Separate several with commas.");
+    const next = [...current];
+    const added: string[] = [];
+    const already: string[] = [];
+    for (const phrase of incoming) {
+      if (next.includes(phrase)) already.push(phrase);
+      else {
+        next.push(phrase);
+        added.push(phrase);
+      }
+    }
+    const lines = [];
+    if (added.length) lines.push(`Added ${added.join(", ")}.`);
+    if (already.length) lines.push(`Already in the list: ${already.join(", ")}.`);
+    lines.push(numberedKeywords(next));
+    if (added.length) persist(next);
+    return fail(lines.join("\n"), next, added.length > 0);
+  }
+  if (command === "remove" && keyPayload() != null) {
+    const selectors = phrases(keyPayload() ?? "");
+    if (!selectors.length) return fail("Name a keyword, a phrase, or a number from /show key.");
+    const drop = current.map(() => false);
+    const removed: string[] = [];
+    const missing: string[] = [];
+    for (const selector of selectors) {
+      let pos = current.indexOf(selector);
+      if (pos < 0 && /^[0-9]+$/.test(selector)) {
+        const index = Number(selector);
+        if (index >= 1 && index <= current.length) pos = index - 1;
+      }
+      if (pos < 0) {
+        const matches = current.map((keyword, index) => ({ keyword, index })).filter((item) => item.keyword.toLowerCase() === selector.toLowerCase());
+        if (matches.length === 1) pos = matches[0].index;
+      }
+      if (pos >= 0 && !drop[pos]) {
+        drop[pos] = true;
+        removed.push(current[pos]);
+      } else if (pos < 0) missing.push(selector);
+    }
+    const next = current.filter((_, index) => !drop[index]);
+    if (!removed.length && !missing.length) return fail("Name a keyword, a phrase, or a number from /show key.");
+    const lines = [];
+    if (removed.length) lines.push(`Removed ${removed.join(", ")}.`);
+    if (missing.length) lines.push(`Not in the list: ${missing.join(", ")}. Use /show key to see the numbers.`);
+    if (removed.length) lines.push(numberedKeywords(next));
+    if (removed.length) persist(next);
+    return fail(lines.join("\n"), next, removed.length > 0);
+  }
+  if (command === "clear" && keyPayload() != null) {
+    const payload = keyPayload() ?? "";
+    if (payload.toLowerCase() === "confirm") {
+      if (!current.length) return fail("The protected keyword list is already empty.");
+      persist([]);
+      return fail(`Cleared ${current.length} protected keywords.`, [], true);
+    }
+    return fail("Nothing was deleted. Type /clear key confirm to remove every protected keyword.");
+  }
+  return fail("Unknown command. Type /help to see /show key, /add key, /remove key, and /clear key.");
 }
 
 export const api = {
@@ -311,6 +467,26 @@ export const api = {
       return;
     }
     await invoke("clear_history");
+  },
+  async getProtectedKeywords(): Promise<KeywordState> {
+    if (!inTauri()) {
+      const keywords = parseKeywordText(localStorage.getItem(KEYWORD_STORAGE) ?? "");
+      return { text: formatKeywordText(keywords), path: "Shown in the desktop app", keywords };
+    }
+    return invoke<KeywordState>("get_protected_keywords");
+  },
+  async saveProtectedKeywords(text: string): Promise<KeywordState> {
+    if (!inTauri()) {
+      const keywords = parseKeywordText(text);
+      const stored = formatKeywordText(keywords);
+      localStorage.setItem(KEYWORD_STORAGE, stored);
+      return { text: stored, path: "Shown in the desktop app", keywords };
+    }
+    return invoke<KeywordState>("save_protected_keywords", { input: { text } });
+  },
+  async runKeywordCommand(line: string): Promise<KeywordCommandResult> {
+    if (!inTauri()) return previewKeywordCommand(line);
+    return invoke<KeywordCommandResult>("run_keyword_command", { input: { line } });
   },
   onOpenSettings(handler: () => void): Promise<UnlistenFn> | null {
     if (!inTauri()) return null;

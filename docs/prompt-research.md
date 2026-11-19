@@ -84,8 +84,9 @@ The planned Windows overlay app rewrites a user's rough prompt into the **target
 | **negative_prompt** (all listed Wan versions) | Up to **500 characters**, then truncated. |
 | **Official T2V rewriter** | Aim for about **60–200 words / 字**. |
 | **Official I2V rewriter** | **100 words or fewer.** |
+| **Community sweet spot (19 Nov 2026)** | About **80–120 words** for a constrained shot (HF forum, citing prompt guides). A tested Wan 2.2 set found **25–80 words** before later words are ignored (wan27.org). Do not raise the 800 / 500 character caps for this. |
 
-For the rewriter app: when the target is Wan 2.2, stay inside **800 characters** after rewrite (safer: keep T2V in the 60–200-word band, I2V under 100 words, then verify the character cap).
+For the rewriter app: when the target is Wan 2.2, stay inside **800 characters** after rewrite. Prefer the **80–120 word** band for T2V when the idea has enough to say, allow **25–80** for a simple shot, and do not pad toward 200. Keep I2V at **100 words or fewer**, then verify the character cap.
 
 ### Special syntax
 
@@ -152,6 +153,32 @@ The woman slowly turns her head toward the window and smiles. Steam drifts from 
 - fal.ai Wan 2.2 model pages (prompt + optional prompt expansion): e.g. https://fal.ai/models/fal-ai/wan/v2.2-a14b/text-to-video
 - Replicate announcement / model pages: https://replicate.com/blog/wan-22
 - Community synthesis that tracks the official formula and 800-character cap: https://vidogrid.com/wan-2-2-prompts
+
+### Community prompt practice (19 Nov 2026)
+
+Three later guides are folded into the Wan templates on top of the official formula. They do not change the API caps (800 positive, 500 negative).
+
+**What they agree on**
+
+- Wan spends more of the prompt on the opening words. Lead with the subject and the motion. A named style goes last, so it does not crowd out who does what. This is a deliberate change from the official rewriter's "put a user style first."
+- Name the camera every time. With no camera line, Wan inserts a mild push-in. One shot size and one move. `fixed camera` (also called `static shot`) holds still. Do not combine aerial with close-up, or a locked camera with handheld, in the same moment.
+- Motion needs speed, direction, and a body part. Chain two or three beats. Vague verbs ("dancing", "fighting") and "running fast" make Wan invent or smear the action.
+- Say how many people are in frame, and say who must not enter. Image-to-video keeps the still for the opening frames and then drifts: extra people, a kiss, a new action.
+- Few-step Wan (Lightning / Rapid, often 4–8 steps at CFG=1) mostly ignores a classic negative prompt. Put "they stay seated" and "nobody else enters" in the positive prompt. Keep blur, anatomy, and watermark cleanup in the negative field.
+- LoRA trigger words change motion as well as looks. Copy them verbatim. That is what the app's protected-keyword list is for.
+
+**Length.** Official T2V guidance remains 60–200 words, and official I2V remains 100 words or fewer. The HF forum answer (John6666, 13 Nov 2025, the post at `/170354/2`) cites an 80–120 word band for prompts that name the shot, the motion, and the constraints. wan27.org, from a large Wan 2.2 prompt set, puts the sweet spot at 25–80 words and says text past that is partly ignored. The templates aim at 80–120 when the idea needs the constraints, allow a shorter simple shot, and still stop at 800 characters.
+
+**Vocabulary these guides treat as Wan-native.** Camera: static shot, slow pan left/right, slow tilt up/down, push in, pull back, zoom in, zoom out, tracking shot, arc shot, dolly, handheld, shallow depth of field, close-up, wide angle, aerial. Light: golden hour sunlight, long shadows, overcast lighting, soft/hard/side/edge/back/rim lighting, practical lighting, firelighting, fluorescent lighting, moonlighting, candlelit, neon on wet pavement. Motion: slowly, gradually, gently, briskly, quickly, suddenly, toward camera, away from camera, left to right. The MonsterMMORPG write-up is the official formula plus the official prompt dictionary (the author says it was taken from the Wan site). The templates keep a short form of that dictionary so the rewriter picks those words instead of synonyms.
+
+**Negative list to start from, then add only what the shot needs.** Official: `low resolution, error, worst quality, low quality, deformed, extra fingers, bad proportions`. wan27.org also uses blurry, bad anatomy, extra limbs, fused fingers, watermark, text, logo, jpeg artifacts, oversaturated, overexposed, and, when relevant, inconsistent face, morphing features, plastic skin, shaky cam, or a crowded background.
+
+**Sources**
+
+- https://wan27.org/blog/wan-2-2-prompt-guide
+- https://discuss.huggingface.co/t/how-to-get-the-most-out-of-prompts-for-wan-models/170354
+- https://discuss.huggingface.co/t/how-to-get-the-most-out-of-prompts-for-wan-models/170354/2
+- https://huggingface.co/blog/MonsterMMORPG/how-to-prompt-wan-models-full-tutorial-and-guide
 
 ---
 
@@ -739,6 +766,10 @@ When the user later says "go," these research points should drive the product, n
 - https://fal.ai/models/fal-ai/wan/v2.2-a14b/text-to-video
 - https://replicate.com/blog/wan-22
 - https://vidogrid.com/wan-2-2-prompts
+- https://wan27.org/blog/wan-2-2-prompt-guide
+- https://discuss.huggingface.co/t/how-to-get-the-most-out-of-prompts-for-wan-models/170354
+- https://discuss.huggingface.co/t/how-to-get-the-most-out-of-prompts-for-wan-models/170354/2
+- https://huggingface.co/blog/MonsterMMORPG/how-to-prompt-wan-models-full-tutorial-and-guide
 
 ### MiniMax H3 and legacy Hailuo
 - https://www.minimax.io/blog/minimax-h3

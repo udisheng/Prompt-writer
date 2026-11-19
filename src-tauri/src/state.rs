@@ -9,6 +9,7 @@ pub struct AppState {
     pub settings_path: PathBuf,
     pub history_path: PathBuf,
     pub secret_path: PathBuf,
+    pub keywords_path: PathBuf,
     pub settings: Mutex<Settings>,
     pub history: Mutex<Vec<HistoryEntry>>,
     pub hotkey_error: Mutex<Option<String>>,

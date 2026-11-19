@@ -19,6 +19,7 @@ The prompt rules come from the research in [`docs/prompt-research.md`](docs/prom
   - Seedance 1.0, 2.0 (4–15 seconds), and 2.5 (4–30 seconds)
   - Seedream generate and edit
 - **Wan returns two fields.** A positive prompt and a separate negative prompt, with their own limits.
+- **Protected keywords.** A list you edit in Settings, in `protected-keywords.txt`, or with `/add key` in the idea box. If a listed word appears in the idea, the rewrite keeps that exact spelling. `{{double braces}}` do the same for one idea.
 - **Per-model limits.** Character and word caps live in each template's frontmatter. The overlay counts the result and turns the count light red when a cap is crossed. The prompt is still shown and saved.
 - **History.** The last 50 rewrites stay on this machine. Click a row to put it back into Compose, or copy it.
 - **Settings.** Backend, model id, Ollama URL, hotkey, default target, and temperature (0 to 2, default 0.4).
@@ -34,7 +35,7 @@ Limits in the table are the frontmatter the running app enforces. "API truncatio
 
 | Template | Output | What the app enforces | Where the number comes from |
 | --- | --- | --- | --- |
-| `wan22-t2v` | positive + negative | 800 characters positive, 500 characters negative | API truncation. The template also aims for about 60–200 words; that band is not a separate counter. |
+| `wan22-t2v` | positive + negative | 800 characters positive, 500 characters negative | API truncation. The template aims for about 80–120 words (official outer band 60–200; a simple shot can be shorter). That band is not a separate counter. |
 | `wan22-i2v` | positive + negative | 100 words and 800 characters positive, 500 characters negative | 100 words from the official I2V rewriter; 800 / 500 are API truncation. |
 | `minimax-h3` | one prompt | 7,000 characters. Duration 4–15 seconds. | API character cap. |
 | `seedance-1.0` | one prompt | 1,000 words. Duration 4–15 seconds. | Quality budget: 1,000 English words or 500 Chinese characters. Only the word cap is in frontmatter. |
@@ -49,15 +50,18 @@ Counts are Unicode scalar values (`"字".chars().count()` is 1), which matches t
 
 File: `core/templates/wan22-t2v.md`.
 
-One paragraph, in the idea's language (Chinese or English), in this order:
+A few short sentences, in the idea's language (Chinese or English), in this order:
 
-1. A named style only when the idea already names one. It goes first.
-2. Entity: the subject that is already in the idea, with concrete appearance.
-3. Scene: environment, foreground, and background.
-4. Motion, including amplitude, speed, and effect. A still idea gets a small plausible action.
-5. At most four aesthetic choices (time of day, light, color, shot size, angle, composition, lens, one camera move). A still camera is the phrase `fixed camera`.
+1. Subject first, including a count when it matters ("exactly two people") and at least two features the idea already supports.
+2. Motion, with speed, direction, and the body part. Two or three beats when the idea has a sequence. A still idea gets one small plausible action. "Walks briskly" is used instead of "running fast".
+3. One shot size and one camera move. A still camera is the exact phrase `fixed camera`. Leaving the camera out makes Wan add a mild push-in.
+4. Scene and light. A named style goes last, and only when the idea already named one.
 
-The template is written for Wan 2.2. It leaves out the voice, sound-effect, and BGM formulas used by Wan 2.5 and later. Negatives stay in the negative field.
+Wan weights the start of the prompt more than the end, so style does not lead. The useful length is about 80–120 words. The official rewriter's 60–200 word band is the outer range, and a simple shot can be shorter (about 25–80). The 800-character cap wins when those disagree. At most four aesthetic choices, counting the shot size and the camera move.
+
+Short positive boundaries ("nobody else enters", "they stay seated") belong in the positive prompt. Few-step Wan at CFG=1 often ignores the negative field, so those constraints do not go only in the negative list.
+
+The template is written for Wan 2.2. It leaves out the voice, sound-effect, and BGM formulas used by Wan 2.5 and later. It also carries a short Wan vocabulary (camera moves, `shallow depth of field`, `golden hour sunlight`, `side lighting`, `film grain`, and the speed words `slowly`, `gently`, `briskly`) so the rewrite uses terms Wan already follows.
 
 The model is asked to return only:
 
@@ -68,24 +72,29 @@ The model is asked to return only:
 Shape example from the template:
 
 ```text
-Warm colors, side lighting, medium close-up, center composition. A young woman with wavy auburn hair in a vintage floral dress stands at a rain-streaked cafe window at dusk. Behind her, brass lamps and wooden tables recede into a softly blurred interior. She slowly lifts a ceramic cup, turns her head toward the glass, and exhales a faint thread of steam. The camera pushes in gently. Live-action, soft practical tungsten light mixed with cool blue residual daylight.
+A young woman with wavy auburn hair and a vintage floral dress slowly lifts a ceramic cup, turns her head toward the window, and exhales a faint thread of steam. Medium close-up, center composition, the camera pushes in gently. She stands at a rain-streaked cafe window at dusk, brass lamps behind her, warm side lighting mixed with cool blue residual daylight. Live-action.
 ```
 
-A negative list starts from the short official set (`low resolution, error, worst quality, low quality, deformed, extra fingers, bad proportions`) and adds only artifacts this idea needs. It stays at or under 500 characters.
+A negative list starts from the short official set (`low resolution, error, worst quality, low quality, deformed, extra fingers, bad proportions`) and adds anatomy, watermark, or plastic-skin terms only when this idea needs them. When the positive prompt says `fixed camera`, the negative list also excludes shaky cam and handheld. It stays at or under 500 characters.
 
 ### Wan 2.2 · Image to video
 
 File: `core/templates/wan22-i2v.md`.
 
-The still already defines the subject, the scene, and the style. The positive prompt is motion, then one camera behavior, in 100 words or fewer and 800 characters or fewer. A camera that should hold still includes the exact phrase `fixed camera`. A change over time is allowed in sequence (`Camera pushes in, then holds a fixed camera.`). Several moves in the same moment are out.
+The still already defines the subject, the scene, and the style. Do not re-describe wardrobe or the room. The clip still drifts after the opening frames, so the positive prompt locks four things, in 100 words or fewer and 800 characters or fewer:
+
+1. How many people stay in frame, when the idea names them ("exactly two people", "nobody else enters").
+2. The motion, with speed and a body part, keeping the action you already named.
+3. One camera behavior. A camera that should hold still includes the exact phrase `fixed camera`. A change over time is allowed in sequence (`Camera pushes in, then holds a fixed camera.`). Several moves in the same moment are out.
+4. Short boundaries for what must not happen ("they remain seated"). Those stay in the positive prompt because a CFG=1 negative list often does not apply them.
 
 Shape example from the template:
 
 ```text
-The woman slowly turns her head toward the window and smiles. Steam drifts from the cup. Camera pushes in, then holds a fixed camera.
+Exactly two people stay in frame, and nobody else enters. The woman slowly turns her head toward the window and smiles. Steam drifts up from the cup. They remain seated. Camera pushes in, then holds a fixed camera.
 ```
 
-When the positive prompt says `fixed camera`, the negative list excludes camera shake and extra camera moves. The same JSON pair is required. This app does not upload the still. The template tells the rewriter that the picture already exists.
+When the positive prompt says `fixed camera`, the negative list excludes shaky cam, handheld, and extra camera moves. The same JSON pair is required. This app does not upload the still. The template tells the rewriter that the picture already exists.
 
 ### MiniMax H3
 
@@ -232,6 +241,40 @@ Dress the tallest panda in pink Peking Opera costume and headgear, keeping its p
 
 The source image is not attached. The prompt has to name the change clearly enough to apply to whatever image you already have in the Seedream UI.
 
+## Protected keywords
+
+A protected keyword is copied into the rewrite exactly: same spelling, case, and punctuation. The rewriter does not translate it, paraphrase it, or drop it. This applies to every target, not only Wan. LoRA trigger words, character names, and style tags are the usual list.
+
+Three ways to set them, all stored in the same file:
+
+| Way | What you do |
+| --- | --- |
+| Settings | **Protected keywords**, one word or phrase per line, then **Save keywords**. |
+| The file | `protected-keywords.txt` in the config folder (next to `settings.json`). One keyword per line. A line that starts with `#` is a note. A JSON array, or `{"keywords": ["Mika"]}`, is read if you put that in the file by hand. Saving from the app writes lines. |
+| The idea box | A line that starts with `/` is a command. It is not sent to the model. The reply appears in the output box. |
+
+Commands, with names that ignore case:
+
+| Command | Effect |
+| --- | --- |
+| `/show key` | Numbered list of the saved keywords. |
+| `/add key Mika, neon noir, zxc_lora` | Adds each comma-separated phrase. The text is stored as typed. A duplicate is skipped. |
+| `/remove key neon noir` | Removes that phrase. A number removes that row from `/show key`, unless a keyword is exactly that number. |
+| `/clear key` | Does not delete anything. |
+| `/clear key confirm` | Deletes the whole list. |
+| `/help` | Prints the command list. |
+
+Typing `/` shows the matching commands under the idea box. Click one to fill it in.
+
+For a single idea, wrap a term in double braces: `a portrait of {{Mika}} in {{neon noir}}`. Those terms are protected for that request even when they are not in the file, and the braces are removed from the rewrite.
+
+On a normal rewrite the app does both of these:
+
+1. It adds the matching terms to the system prompt, so the model is told to copy them.
+2. After the reply, Rust checks that each of those terms is still in the prompt. If any are missing, it sends one corrective follow-up. If they are still missing, the output shows a warning that names them, and **Append missing terms** adds them to the end of the prompt.
+
+A keyword matches wherever that exact string occurs in the idea, including inside a longer word, so short generic words are a poor fit for the list.
+
 ## Architecture
 
 ```text
@@ -260,9 +303,12 @@ The window asks Rust to call the provider. The saved key stays in the Rust proce
 1. Trims the idea and rejects an empty idea or one longer than 8,000 characters.
 2. Loads `{id}.md` from the config templates folder (and writes the bundled copy if that file is missing).
 3. Checks duration: MiniMax H3 and Seedance 1.0 / 2.0 are 4–15 seconds, Seedance 2.5 is 4–30, and Wan and Seedream ignore duration.
-4. Renders the system prompt and a user message that names the target, the duration when there is one, and the rough idea.
+4. Renders the system prompt and a user message that names the target, the duration when there is one, and the rough idea. Protected keywords that appear in the idea, and any `{{double brace}}` terms, are appended to the system prompt.
 5. Builds a chat request and posts it. Timeout is 10 seconds to connect and 120 seconds overall. The user agent is `PromptRewriter/0.1`.
-6. Parses the reply, measures it against the template caps, prepends a history entry, and returns the text.
+6. Parses the reply, strips braces around inline protected terms, and checks that every required term is still present. If any are missing, it retries once with a corrective message. Terms that are still missing are returned as a warning.
+7. Measures the result against the template caps, prepends a history entry, and returns the text.
+
+A line that starts with `/` never reaches this path. It is handled as a keyword command and written to `protected-keywords.txt` immediately.
 
 Wan replies are parsed as JSON (`positive` / `positive_prompt` / `prompt`, and `negative` / `negative_prompt`), including a fenced block or a JSON object wrapped in prose. A `POSITIVE:` / `NEGATIVE:` or `---POSITIVE---` / `---NEGATIVE---` split is the fallback. If that fails, the raw reply is placed in the positive box with the warning "Could not split a positive and negative prompt. The raw reply is in the positive box." Other targets return the prompt text, with a markdown fence removed if the model added one.
 
@@ -282,6 +328,7 @@ Tauri's app config directory for identifier `com.promptrewriter.app`. Settings s
 | `history.json` | `{ "entries": [ ... ] }`, newest first, capped at 50. |
 | `openrouter.key` | Fallback only, when the OS keychain cannot store the key. Mode `0600` on Unix. |
 | `templates/*.md` | The templates the running app reads. |
+| `protected-keywords.txt` | Protected keywords, one word or phrase per line. |
 
 A `settings.json` or `history.json` that does not parse is renamed to the same name plus `.bak`, and the app continues with defaults or an empty history.
 
@@ -349,7 +396,7 @@ The default hotkey is **Ctrl+Shift+Space**. If another app already owns it, the 
 
 ## Tests
 
-`npm test` runs `cargo test --manifest-path core/Cargo.toml`. The 21 tests in `rewriter-core` cover:
+`npm test` runs `cargo test --manifest-path core/Cargo.toml`. The 28 tests in `rewriter-core` cover:
 
 - bundled templates still contain each model's format rules
 - request URLs, bodies, and headers for OpenRouter and Ollama
@@ -359,6 +406,7 @@ The default hotkey is **Ctrl+Shift+Space**. If another app already owns it, the 
 - history capped at 50
 - the key file created mode `0600` on Unix
 - duration bounds, frontmatter parsing, and secret redaction
+- protected-keyword file parsing, `{{double brace}}` extraction, the post-check that a term survived the rewrite, and the `/add key` command parser
 
 The Tauri crate has one extra test that only checks hotkey string parsing. `npm test` does not build the GUI crate.
 
@@ -452,6 +500,8 @@ Start the server with `ollama serve` when the app reports that Ollama is not run
 | Could not split a positive and negative prompt. | The Wan reply was not JSON and had no POSITIVE / NEGATIVE markers. The raw text is in the positive box. |
 | `wan22-t2v.md: frontmatter …` | That template file failed to parse. The banner lists invalid files. Fix it or use Reset to default. |
 | The prompt is N characters, over the 800 character model limit. | Shown under the result. The count is light red. The text is still there and still saved. A word warning uses the same pattern ("over the 1000 word model limit"). |
+| Protected terms missing from the rewrite: … | The model dropped a keyword or a `{{term}}` after one retry. **Append missing terms** adds them to the end of the prompt. |
+| Unknown command. Type /help… | The idea starts with `/`, so it was handled as a keyword command and was not rewritten. |
 
 If Settings suddenly returns to defaults, look for `settings.json.bak` in the config folder. The previous file did not parse.
 
@@ -466,7 +516,8 @@ If Settings suddenly returns to defaults, look for `settings.json.bak` in the co
 - A result that crosses a cap is still shown, copied, and stored. The app does not truncate it to the limit.
 - The Windows installers from a local build and from GitHub Actions are unsigned.
 - This repository does not cross-compile the Windows installer from Linux. Use a Windows machine or the Actions workflow.
-- The browser preview (`npm run dev` outside Tauri) does not store a real API key and does not call a model. Its template list is a stand-in for layout. Limits you see there are not the bundled frontmatter.
+- The browser preview (`npm run dev` outside Tauri) does not store a real API key and does not call a model. Its template list is a stand-in for layout. Limits you see there are not the bundled frontmatter. Keyword commands in that preview are stored in the browser only.
+- An idea that starts with `/` is a keyword command. It is not rewritten.
 
 ## Project structure
 
@@ -480,6 +531,7 @@ If Settings suddenly returns to defaults, look for `settings.json.bak` in the co
 │   │   ├── history.rs              # last-50 list
 │   │   ├── http.rs                 # OpenRouter and Ollama client
 │   │   ├── parse.rs                # Wan JSON / markers, length checks
+│   │   ├── protect.rs              # protected keywords, braces, slash commands
 │   │   ├── redact.rs               # strip secrets from errors
 │   │   ├── secret_file.rs          # private-file fallback, mode 0600
 │   │   ├── settings.rs             # defaults and temperature clamp

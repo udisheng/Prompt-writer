@@ -65,6 +65,8 @@
             </span>
             <textarea id="idea" rows="5" maxlength="8000" placeholder="A rain-soaked courier pauses under a neon bakery sign, then sprints across the empty street."></textarea>
           </label>
+          <p class="hint">Type / to manage protected keywords. {{double braces}} keep a term verbatim for this idea only.</p>
+          <div id="command-hint" class="command-hint" hidden></div>
 
           <div class="action-row">
             <button type="button" id="rewrite" class="primary">Rewrite</button>
@@ -94,6 +96,9 @@
             </div>
           </section>
           <ul id="warnings" class="warnings"></ul>
+          <div id="protected-actions" class="copy-row" hidden>
+            <button type="button" id="append-protected" class="ghost">Append missing terms</button>
+          </div>
         </section>
 
         <section id="view-history" hidden>
@@ -178,6 +183,16 @@
               <input id="temperature" type="range" min="0" max="2" step="0.1" />
             </label>
             <button type="button" id="save-settings" class="primary">Save settings</button>
+          </div>
+
+          <div class="panel">
+            <h3>Protected keywords</h3>
+            <p class="hint">One word or phrase per line. When that text appears in an idea, the rewrite keeps the same spelling, case, and punctuation. Lines starting with # are notes. The idea box can edit this list too: /show key, /add key, /remove key, /clear key. A JSON array already in the file is read; saving writes one keyword per line.</p>
+            <p class="hint" id="keywords-path"></p>
+            <textarea id="keywords-editor" rows="6" spellcheck="false" placeholder="Mika&#10;zxc_lora"></textarea>
+            <div class="copy-row">
+              <button type="button" id="save-keywords" class="ghost">Save keywords</button>
+            </div>
           </div>
 
           <div class="panel">

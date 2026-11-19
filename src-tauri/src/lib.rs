@@ -37,6 +37,7 @@ pub fn run() {
             let settings_path = config_dir.join("settings.json");
             let history_path = config_dir.join("history.json");
             let secret_path = config_dir.join("openrouter.key");
+            let keywords_path = config_dir.join("protected-keywords.txt");
             let settings = files::load_settings(&settings_path);
             let history = files::load_history(&history_path);
             let http = rewriter_core::http_client().map_err(|err| err.to_string())?;
@@ -48,6 +49,7 @@ pub fn run() {
                 settings_path,
                 history_path,
                 secret_path,
+                keywords_path,
                 settings: std::sync::Mutex::new(settings),
                 history: std::sync::Mutex::new(history),
                 hotkey_error: std::sync::Mutex::new(None),
@@ -78,7 +80,10 @@ pub fn run() {
             commands::rewrite,
             commands::list_history,
             commands::delete_history_entry,
-            commands::clear_history
+            commands::clear_history,
+            commands::get_protected_keywords,
+            commands::save_protected_keywords,
+            commands::run_keyword_command
         ])
         .run(tauri::generate_context!())
         .expect("error while running Prompt Rewriter");
@@ -90,7 +95,12 @@ mod hotkey_tests {
 
     #[test]
     fn documented_shortcuts_parse() {
-        for sample in ["Ctrl+Shift+Space", "Ctrl+Shift+C", "CommandOrControl+Shift+Space", "Alt+Space"] {
+        for sample in [
+            "Ctrl+Shift+Space",
+            "Ctrl+Shift+C",
+            "CommandOrControl+Shift+Space",
+            "Alt+Space",
+        ] {
             parse_hotkey(sample).unwrap_or_else(|err| panic!("{sample}: {err}"));
         }
     }

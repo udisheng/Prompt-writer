@@ -186,6 +186,17 @@ input:focus, select:focus, textarea:focus { border-color: #6d85ad; }
 .warnings { margin: 8px 0 0; padding-left: 18px; }
 .warnings:empty { display: none; }
 
+.command-hint { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 2px; }
+.command-hint button {
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--elev);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+.command-hint strong { font-weight: 650; }
+.command-hint span { color: var(--muted); margin-left: 8px; }
+
 h2, h3 { margin: 0; font-weight: 650; }
 h2 { font-size: 15px; }
 h3 { font-size: 13px; }
