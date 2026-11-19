@@ -365,8 +365,13 @@ mod tests {
                     assert!(body.contains("800"));
                     assert!(body.contains("60"));
                     assert!(body.contains("200"));
+                    assert!(body.contains("80 to 120"));
                     assert!(body.contains("negative"));
                     assert!(body.contains("2.5"));
+                    assert!(body.contains("fixed camera"));
+                    assert!(body.contains("golden hour"));
+                    assert!(body.contains("shallow depth of field"));
+                    assert!(body.contains("cfg=1"));
                     assert_eq!(template.output, OutputKind::WanPair);
                     assert_eq!(template.max_chars, Some(800));
                     assert_eq!(template.negative_max_chars, Some(500));
@@ -375,7 +380,11 @@ mod tests {
                     assert!(body.contains("fixed camera"));
                     assert!(body.contains("100"));
                     assert!(body.contains("motion"));
+                    assert!(body.contains("nobody else"));
+                    assert!(body.contains("cfg=1"));
+                    assert!(body.contains("800"));
                     assert_eq!(template.max_words, Some(100));
+                    assert_eq!(template.max_chars, Some(800));
                     assert_eq!(template.output, OutputKind::WanPair);
                 }
                 "minimax-h3" => {

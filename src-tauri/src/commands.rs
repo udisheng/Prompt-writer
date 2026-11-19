@@ -3,10 +3,13 @@ use crate::secrets::{self, SecretStatus};
 use crate::state::AppState;
 use crate::window::{self, present_main};
 use rewriter_core::{
-    build_chat_request, build_user_message, bundled_by_id, chat_complete, list_ollama_models,
-    list_openrouter_models, measure, ollama_tags_url, parse_output, push_history, render_system,
-    validate_duration, validate_idea, Backend, ChatParams, HistoryEntry, LimitKind, ModelInfo,
-    OutputKind, ProviderKind, Settings, OPENROUTER_BASE,
+    Backend, ChatParams, HistoryEntry, LimitKind, MeasuredPrompt, ModelInfo, OPENROUTER_BASE,
+    OutputKind, ProviderKind, Settings, Template, build_chat_request, build_user_message,
+    bundled_by_id, chat_complete, corrective_message, format_keyword_text, list_ollama_models,
+    list_openrouter_models, measure, missing_terms, missing_warning, ollama_tags_url,
+    parse_keyword_document, parse_output, protection_for, push_history, render_system,
+    run_keyword_line, should_retry_protection, strip_inline_braces, system_addon,
+    validate_duration, validate_idea,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -109,6 +112,7 @@ pub struct RewriteResponse {
     pub over_limit: bool,
     pub warnings: Vec<String>,
     pub history_id: String,
+    pub missing_protected: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -117,7 +121,42 @@ pub struct HistoryId {
     pub id: String,
 }
 
-fn view(app: &AppHandle, state: &AppState, settings: &Settings, secret: &SecretStatus) -> SettingsView {
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeywordState {
+    pub text: String,
+    pub path: String,
+    pub keywords: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeywordText {
+    pub text: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeywordLine {
+    pub line: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeywordCommandResponse {
+    pub handled: bool,
+    pub changed: bool,
+    pub message: String,
+    pub keywords: Vec<String>,
+    pub text: String,
+}
+
+fn view(
+    app: &AppHandle,
+    state: &AppState,
+    settings: &Settings,
+    secret: &SecretStatus,
+) -> SettingsView {
     let hotkey_error = state.hotkey_error.lock().ok().and_then(|slot| slot.clone());
     SettingsView {
         backend: settings.backend,
@@ -148,7 +187,11 @@ pub fn get_settings(app: AppHandle, state: State<'_, AppState>) -> Result<Settin
 }
 
 #[tauri::command]
-pub fn save_settings(app: AppHandle, state: State<'_, AppState>, input: SaveSettings) -> Result<SettingsView, String> {
+pub fn save_settings(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    input: SaveSettings,
+) -> Result<SettingsView, String> {
     let next = Settings {
         backend: input.backend,
         openrouter_model: input.openrouter_model,
@@ -188,7 +231,11 @@ pub fn save_settings(app: AppHandle, state: State<'_, AppState>, input: SaveSett
 }
 
 #[tauri::command]
-pub fn set_openrouter_key(app: AppHandle, state: State<'_, AppState>, input: KeyInput) -> Result<SettingsView, String> {
+pub fn set_openrouter_key(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    input: KeyInput,
+) -> Result<SettingsView, String> {
     secrets::save_key(&state.secret_path, &input.api_key)?;
     let settings = state
         .settings
@@ -200,7 +247,10 @@ pub fn set_openrouter_key(app: AppHandle, state: State<'_, AppState>, input: Key
 }
 
 #[tauri::command]
-pub fn clear_openrouter_key(app: AppHandle, state: State<'_, AppState>) -> Result<SettingsView, String> {
+pub fn clear_openrouter_key(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<SettingsView, String> {
     secrets::clear_key(&state.secret_path)?;
     let settings = state
         .settings
@@ -212,7 +262,10 @@ pub fn clear_openrouter_key(app: AppHandle, state: State<'_, AppState>) -> Resul
 }
 
 #[tauri::command]
-pub async fn list_backend_models(state: State<'_, AppState>, query: ModelQuery) -> Result<ModelList, String> {
+pub async fn list_backend_models(
+    state: State<'_, AppState>,
+    query: ModelQuery,
+) -> Result<ModelList, String> {
     let models = match query.backend {
         Backend::Openrouter => {
             let stored = secrets::load_key(&state.secret_path)?;
@@ -250,7 +303,10 @@ pub fn list_templates(state: State<'_, AppState>) -> TemplateCatalog {
 }
 
 #[tauri::command]
-pub fn read_template(state: State<'_, AppState>, input: TemplateId) -> Result<TemplateDocument, String> {
+pub fn read_template(
+    state: State<'_, AppState>,
+    input: TemplateId,
+) -> Result<TemplateDocument, String> {
     let contents = files::read_template_source(&state.templates_dir, &input.id)?;
     Ok(TemplateDocument {
         id: input.id,
@@ -259,13 +315,19 @@ pub fn read_template(state: State<'_, AppState>, input: TemplateId) -> Result<Te
 }
 
 #[tauri::command]
-pub fn save_template(state: State<'_, AppState>, input: TemplateWrite) -> Result<TemplateCatalog, String> {
+pub fn save_template(
+    state: State<'_, AppState>,
+    input: TemplateWrite,
+) -> Result<TemplateCatalog, String> {
     files::write_template_source(&state.templates_dir, &input.id, &input.contents)?;
     Ok(files::catalog(&state.templates_dir))
 }
 
 #[tauri::command]
-pub fn reset_template(state: State<'_, AppState>, input: TemplateId) -> Result<TemplateCatalog, String> {
+pub fn reset_template(
+    state: State<'_, AppState>,
+    input: TemplateId,
+) -> Result<TemplateCatalog, String> {
     let bundled = bundled_by_id(&input.id).map_err(|err| err.to_string())?;
     files::write_template_source(&state.templates_dir, &input.id, bundled)?;
     Ok(files::catalog(&state.templates_dir))
@@ -274,7 +336,10 @@ pub fn reset_template(state: State<'_, AppState>, input: TemplateId) -> Result<T
 #[tauri::command]
 pub fn open_templates_dir(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     app.opener()
-        .open_path(state.templates_dir.to_string_lossy().to_string(), None::<&str>)
+        .open_path(
+            state.templates_dir.to_string_lossy().to_string(),
+            None::<&str>,
+        )
         .map_err(|err| format!("Could not open the templates folder: {err}"))
 }
 
@@ -292,18 +357,32 @@ pub fn show_window(app: AppHandle) {
 }
 
 #[tauri::command]
-pub async fn rewrite(state: State<'_, AppState>, input: RewriteInput) -> Result<RewriteResponse, String> {
+pub async fn rewrite(
+    state: State<'_, AppState>,
+    input: RewriteInput,
+) -> Result<RewriteResponse, String> {
     let idea = validate_idea(&input.idea).map_err(|err| err.to_string())?;
-    let path_name = rewriter_core::template_filename(&input.template_id).map_err(|err| err.to_string())?;
+    if idea.starts_with('/') {
+        return Err(
+            "Lines that start with / are keyword commands. They are not sent to the model.".into(),
+        );
+    }
+    let path_name =
+        rewriter_core::template_filename(&input.template_id).map_err(|err| err.to_string())?;
     let path = state.templates_dir.join(&path_name);
     if !path.exists() {
         if let Ok(bundled) = bundled_by_id(&input.template_id) {
-            fs::write(&path, bundled).map_err(|err| format!("Could not restore the template: {err}"))?;
+            fs::write(&path, bundled)
+                .map_err(|err| format!("Could not restore the template: {err}"))?;
         }
     }
     let template = files::read_template_file(&state.templates_dir, &input.template_id)?;
-    let duration = validate_duration(&template.id, input.duration_secs).map_err(|err| err.to_string())?;
-    let system = render_system(&template, duration);
+    let duration =
+        validate_duration(&template.id, input.duration_secs).map_err(|err| err.to_string())?;
+    let saved_keywords = parse_keyword_document(&files::load_keyword_text(&state.keywords_path));
+    let protection = protection_for(&idea, &saved_keywords);
+    let mut system = render_system(&template, duration);
+    system.push_str(&system_addon(&protection.required));
     let user = build_user_message(&template, &idea, duration);
     let settings = state
         .settings
@@ -337,8 +416,28 @@ pub async fn rewrite(state: State<'_, AppState>, input: RewriteInput) -> Result<
         user: &user,
     })
     .map_err(|err| err.to_string())?;
-    let raw = chat_complete(&state.http, &request).await.map_err(|err| err.to_string())?;
-    let measured = measure(&template, parse_output(template.output, &raw));
+    let raw = chat_complete(&state.http, &request)
+        .await
+        .map_err(|err| err.to_string())?;
+    let mut measured = protected_measure(&template, &raw, &protection.inline);
+    let mut missing = missing_terms(&measured.output, &protection.required);
+    if should_retry_protection(0, &missing) {
+        let follow = request.with_follow_up(&raw, &corrective_message(&missing));
+        match chat_complete(&state.http, &follow).await {
+            Ok(retry_raw) => {
+                measured = protected_measure(&template, &retry_raw, &protection.inline);
+                missing = missing_terms(&measured.output, &protection.required);
+            }
+            Err(err) => {
+                measured.warnings.push(format!(
+                    "The retry to put protected terms back failed: {err}"
+                ));
+            }
+        }
+    }
+    if !missing.is_empty() {
+        measured.warnings.push(missing_warning(&missing));
+    }
     let backend_name = match settings.backend {
         Backend::Openrouter => "openrouter",
         Backend::Ollama => "ollama",
@@ -380,6 +479,63 @@ pub async fn rewrite(state: State<'_, AppState>, input: RewriteInput) -> Result<
         over_limit: measured.over_limit,
         warnings: measured.warnings,
         history_id,
+        missing_protected: missing,
+    })
+}
+
+fn protected_measure(template: &Template, raw: &str, inline: &[String]) -> MeasuredPrompt {
+    let mut parsed = parse_output(template.output, raw);
+    parsed.output = strip_inline_braces(&parsed.output, inline);
+    if let Some(negative) = parsed.negative.as_mut() {
+        *negative = strip_inline_braces(negative, inline);
+    }
+    measure(template, parsed)
+}
+
+fn keyword_state(path: &std::path::Path, keywords: &[String]) -> KeywordState {
+    KeywordState {
+        text: format_keyword_text(keywords),
+        path: path.display().to_string(),
+        keywords: keywords.to_vec(),
+    }
+}
+
+#[tauri::command]
+pub fn get_protected_keywords(state: State<'_, AppState>) -> KeywordState {
+    let keywords = parse_keyword_document(&files::load_keyword_text(&state.keywords_path));
+    keyword_state(&state.keywords_path, &keywords)
+}
+
+#[tauri::command]
+pub fn save_protected_keywords(
+    state: State<'_, AppState>,
+    input: KeywordText,
+) -> Result<KeywordState, String> {
+    let keywords = parse_keyword_document(&input.text);
+    let text = format_keyword_text(&keywords);
+    files::save_keyword_text(&state.keywords_path, &text)?;
+    Ok(keyword_state(&state.keywords_path, &keywords))
+}
+
+#[tauri::command]
+pub fn run_keyword_command(
+    state: State<'_, AppState>,
+    input: KeywordLine,
+) -> Result<KeywordCommandResponse, String> {
+    let current = parse_keyword_document(&files::load_keyword_text(&state.keywords_path));
+    let outcome = run_keyword_line(&current, &input.line);
+    if outcome.changed {
+        files::save_keyword_text(
+            &state.keywords_path,
+            &format_keyword_text(&outcome.keywords),
+        )?;
+    }
+    Ok(KeywordCommandResponse {
+        handled: outcome.handled,
+        changed: outcome.changed,
+        message: outcome.message,
+        keywords: outcome.keywords.clone(),
+        text: format_keyword_text(&outcome.keywords),
     })
 }
 
@@ -393,7 +549,10 @@ pub fn list_history(state: State<'_, AppState>) -> Result<Vec<HistoryEntry>, Str
 }
 
 #[tauri::command]
-pub fn delete_history_entry(state: State<'_, AppState>, input: HistoryId) -> Result<Vec<HistoryEntry>, String> {
+pub fn delete_history_entry(
+    state: State<'_, AppState>,
+    input: HistoryId,
+) -> Result<Vec<HistoryEntry>, String> {
     let mut history = state
         .history
         .lock()

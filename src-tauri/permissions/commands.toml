@@ -77,3 +77,18 @@ commands.allow = ["delete_history_entry"]
 identifier = "allow-clear-history"
 description = "Clear rewrite history."
 commands.allow = ["clear_history"]
+
+[[permission]]
+identifier = "allow-get-protected-keywords"
+description = "Read the protected keyword list."
+commands.allow = ["get_protected_keywords"]
+
+[[permission]]
+identifier = "allow-save-protected-keywords"
+description = "Save the protected keyword list."
+commands.allow = ["save_protected_keywords"]
+
+[[permission]]
+identifier = "allow-run-keyword-command"
+description = "Run a protected-keyword slash command."
+commands.allow = ["run_keyword_command"]

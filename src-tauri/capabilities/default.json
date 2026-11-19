@@ -28,6 +28,9 @@
     "allow-rewrite",
     "allow-list-history",
     "allow-delete-history-entry",
-    "allow-clear-history"
+    "allow-clear-history",
+    "allow-get-protected-keywords",
+    "allow-save-protected-keywords",
+    "allow-run-keyword-command"
   ]
 }

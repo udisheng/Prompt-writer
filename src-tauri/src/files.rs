@@ -1,5 +1,5 @@
 use rewriter_core::{
-    bundled_templates, parse_template, HistoryEntry, Settings, Template, TemplateSummary,
+    HistoryEntry, Settings, Template, TemplateSummary, bundled_templates, parse_template,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -25,7 +25,8 @@ struct HistoryFile {
 }
 
 pub fn seed_templates(dir: &Path) -> Result<(), String> {
-    fs::create_dir_all(dir).map_err(|err| format!("Could not create the templates folder: {err}"))?;
+    fs::create_dir_all(dir)
+        .map_err(|err| format!("Could not create the templates folder: {err}"))?;
     for (name, contents) in bundled_templates() {
         let path = dir.join(name);
         if !path.exists() {
@@ -82,7 +83,9 @@ pub fn catalog(dir: &Path) -> TemplateCatalog {
     let Ok(read) = fs::read_dir(dir) else {
         return TemplateCatalog { templates, invalid };
     };
-    let mut paths: Vec<PathBuf> = read.filter_map(|entry| entry.ok().map(|item| item.path())).collect();
+    let mut paths: Vec<PathBuf> = read
+        .filter_map(|entry| entry.ok().map(|item| item.path()))
+        .collect();
     paths.sort();
     for path in paths {
         let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
@@ -133,7 +136,8 @@ pub fn write_template_source(dir: &Path, id: &str, contents: &str) -> Result<Tem
         return Err("The frontmatter id has to match the file you are editing.".into());
     }
     let path = dir.join(name);
-    atomic_write(&path, contents.as_bytes()).map_err(|err| format!("Could not save the template: {err}"))?;
+    atomic_write(&path, contents.as_bytes())
+        .map_err(|err| format!("Could not save the template: {err}"))?;
     Ok(template)
 }
 
@@ -146,6 +150,15 @@ fn backup_path(path: &Path) -> PathBuf {
     let mut backup = path.as_os_str().to_os_string();
     backup.push(".bak");
     PathBuf::from(backup)
+}
+
+pub fn load_keyword_text(path: &Path) -> String {
+    fs::read_to_string(path).unwrap_or_default()
+}
+
+pub fn save_keyword_text(path: &Path, text: &str) -> Result<(), String> {
+    atomic_write(path, text.as_bytes())
+        .map_err(|err| format!("Could not save protected keywords: {err}"))
 }
 
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> std::io::Result<()> {

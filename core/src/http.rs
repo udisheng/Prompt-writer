@@ -139,6 +139,24 @@ pub fn build_chat_request(params: ChatParams<'_>) -> Result<ChatRequest, Rewrite
     })
 }
 
+impl ChatRequest {
+    /// Second turn: show the model its previous reply and ask it to restore protected terms.
+    pub fn with_follow_up(&self, assistant_reply: &str, correction: &str) -> Self {
+        let mut next = self.clone();
+        if let Some(messages) = next.body.get_mut("messages").and_then(Value::as_array_mut) {
+            messages.push(json!({
+                "role": "assistant",
+                "content": assistant_reply,
+            }));
+            messages.push(json!({
+                "role": "user",
+                "content": correction,
+            }));
+        }
+        next
+    }
+}
+
 pub async fn chat_complete(client: &reqwest::Client, request: &ChatRequest) -> Result<String, RewriteError> {
     let mut builder = client.post(&request.url).json(&request.body);
     for (key, value) in &request.headers {
@@ -505,6 +523,28 @@ mod tests {
             user: "u",
         })
         .is_err());
+    }
+
+    #[test]
+    fn follow_up_appends_the_correction_after_the_first_reply() {
+        let request = build_chat_request(ChatParams {
+            provider: ProviderKind::Ollama,
+            base_url: "http://localhost:11434",
+            api_key: None,
+            model: "llama3.2",
+            temperature: 0.4,
+            system: "system rules",
+            user: "rough idea",
+        })
+        .unwrap();
+        let follow = request.with_follow_up("{\"positive\":\"dropped\"}", "Put Mika back.");
+        let messages = follow.body["messages"].as_array().unwrap();
+        assert_eq!(messages.len(), 4);
+        assert_eq!(messages[2]["role"], "assistant");
+        assert!(messages[2]["content"].as_str().unwrap().contains("dropped"));
+        assert_eq!(messages[3]["role"], "user");
+        assert!(messages[3]["content"].as_str().unwrap().contains("Mika"));
+        assert_eq!(messages[0]["content"], "system rules");
     }
 
     #[test]
