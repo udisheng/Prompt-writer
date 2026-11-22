@@ -4,11 +4,12 @@ use crate::state::AppState;
 use crate::window::{self, present_main};
 use rewriter_core::{
     Backend, ChatParams, HistoryEntry, LimitKind, MeasuredPrompt, ModelInfo, OPENROUTER_BASE,
-    OutputKind, ProviderKind, Settings, Template, build_chat_request, build_user_message,
-    bundled_by_id, chat_complete, corrective_message, format_keyword_text, list_ollama_models,
-    list_openrouter_models, measure, migrate_template_id, missing_terms, missing_warning,
-    ollama_tags_url, parse_keyword_document, parse_output, protection_for, push_history,
-    render_system, run_keyword_line, should_retry_protection, strip_inline_braces, system_addon,
+    OutputKind, ProviderKind, Settings, Template, action_addon, action_requirements,
+    action_warning, build_chat_request, build_user_message, bundled_by_id, chat_complete,
+    combined_retry, format_keyword_text, list_ollama_models, list_openrouter_models, measure,
+    migrate_template_id, missing_action_terms, missing_terms, missing_warning, ollama_tags_url,
+    parse_keyword_document, parse_output, protection_for, push_history, render_system,
+    run_keyword_line, should_retry_protection, strip_inline_braces, system_addon,
     validate_duration, validate_idea,
 };
 use serde::{Deserialize, Serialize};
@@ -113,6 +114,7 @@ pub struct RewriteResponse {
     pub warnings: Vec<String>,
     pub history_id: String,
     pub missing_protected: Vec<String>,
+    pub missing_actions: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -382,8 +384,14 @@ pub async fn rewrite(
         validate_duration(&template.id, input.duration_secs).map_err(|err| err.to_string())?;
     let saved_keywords = parse_keyword_document(&files::load_keyword_text(&state.keywords_path));
     let protection = protection_for(&idea, &saved_keywords);
+    let actions = if template.family == "minimax-h3-image" {
+        action_requirements(&idea, template.variant == "edit")
+    } else {
+        rewriter_core::ActionRequirements::default()
+    };
     let mut system = render_system(&template, duration);
     system.push_str(&system_addon(&protection.required));
+    system.push_str(&action_addon(&actions));
     let user = build_user_message(&template, &idea, duration);
     let settings = state
         .settings
@@ -422,22 +430,28 @@ pub async fn rewrite(
         .map_err(|err| err.to_string())?;
     let mut measured = protected_measure(&template, &raw, &protection.inline);
     let mut missing = missing_terms(&measured.output, &protection.required);
-    if should_retry_protection(0, &missing) {
-        let follow = request.with_follow_up(&raw, &corrective_message(&missing));
+    let mut missing_actions = missing_action_terms(&measured.output, &actions);
+    if should_retry_protection(0, &missing) || should_retry_protection(0, &missing_actions) {
+        let note = combined_retry(&missing, &missing_actions).unwrap_or_default();
+        let follow = request.with_follow_up(&raw, &note);
         match chat_complete(&state.http, &follow).await {
             Ok(retry_raw) => {
                 measured = protected_measure(&template, &retry_raw, &protection.inline);
                 missing = missing_terms(&measured.output, &protection.required);
+                missing_actions = missing_action_terms(&measured.output, &actions);
             }
             Err(err) => {
                 measured.warnings.push(format!(
-                    "The retry to put protected terms back failed: {err}"
+                    "The retry to put required words back failed: {err}"
                 ));
             }
         }
     }
     if !missing.is_empty() {
         measured.warnings.push(missing_warning(&missing));
+    }
+    if !missing_actions.is_empty() {
+        measured.warnings.push(action_warning(&missing_actions));
     }
     let backend_name = match settings.backend {
         Backend::Openrouter => "openrouter",
@@ -481,6 +495,7 @@ pub async fn rewrite(
         warnings: measured.warnings,
         history_id,
         missing_protected: missing,
+        missing_actions,
     })
 }
 

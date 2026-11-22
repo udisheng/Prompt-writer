@@ -71,6 +71,7 @@ export interface RewriteResult {
   warnings: string[];
   historyId: string;
   missingProtected: string[];
+  missingActions: string[];
 }
 
 export interface KeywordState {
@@ -172,7 +173,7 @@ function previewRewrite(idea: string, templateId: string, duration: number | nul
       output = `fixed camera. ${idea.trim()}`;
     }
   } else if (templateId === "minimax-h3-image-edit" || templateId === "minimax-h3-image-t2i" || templateId === "minimax-h3") {
-    output = `${idea.trim()} Visible pores and slight skin unevenness, muted colours, mild film grain. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.`;
+    output = `${idea.trim()} Soft window light, true-to-life colours, natural skin texture with visible pores, and realistic depth of field. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.`;
   } else if (templateId === "seedance-2.0") {
     output = `Shot 1: locked-off camera. ${idea.trim()}\nkeep it subtitle-free.`;
   } else if (templateId === "seedance-2.5") {
@@ -228,6 +229,7 @@ function previewRewrite(idea: string, templateId: string, duration: number | nul
     warnings,
     historyId: entry.id,
     missingProtected: [],
+    missingActions: [],
   };
 }
 

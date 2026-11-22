@@ -32,8 +32,8 @@ const FAMILIES = [
 const HINTS: Record<string, string> = {
   "wan22-t2v": "Subject, motion, then camera and light. About 80–120 words, and the positive prompt must stay within 800 characters.",
   "wan22-i2v": "Count, motion, one camera, and what must not happen. “fixed camera” holds a still shot. 100 words.",
-  "minimax-h3-image-t2i": "One or more plain paragraphs. Concrete light and materials. No resolution tags and no negative prompt.",
-  "minimax-h3-image-edit": "Name each reference once as <Subject N> from <Picture N>. Say what stays and what changes. One plain prompt.",
+  "minimax-h3-image-t2i": "Open with the action. Natural light and skin. Film grain only when you ask for it.",
+  "minimax-h3-image-edit": "Lead with the pose, hands, gaze, and expression. A short preservation line comes after that.",
   "seedance-1.0": "Subject plus action. Scene changes use “camera/scene switch”. Duration is a trailing --duration flag.",
   "seedance-2.0": "Shot 1, Shot 2, one camera move each. Bind references as @Image 1. Do not use timestamps.",
   "seedance-2.5": "Asset map, summary, timestamped shots, and constants. Clips can run up to 30 seconds.",
@@ -285,7 +285,10 @@ function renderOutput() {
   const template = templateOf(state.templateId);
   const result = state.result;
   const output = ui.output.value;
-  const missing = result?.missingProtected ?? [];
+  const missing = [
+    ...(result?.missingProtected ?? []),
+    ...(result?.missingActions ?? []),
+  ];
   ui.protectedActions.hidden = missing.length === 0;
   if (state.commandOutput) {
     ui.outputLabel.textContent = "Keyword command";
@@ -378,6 +381,7 @@ function renderHistory(entries: HistoryEntry[]) {
         warnings: entry.warnings,
         historyId: entry.id,
         missingProtected: [],
+        missingActions: [],
       };
       state.commandOutput = false;
       renderOutput();
@@ -514,7 +518,10 @@ async function runKeywordCommand(line: string) {
 }
 
 function appendMissingTerms() {
-  const missing = state.result?.missingProtected ?? [];
+  const missing = [
+    ...(state.result?.missingProtected ?? []),
+    ...(state.result?.missingActions ?? []),
+  ];
   if (!missing.length) return;
   const current = ui.output.value.replace(/\s+$/, "");
   const addition = missing.join(", ");
@@ -527,7 +534,10 @@ function appendMissingTerms() {
       charCount: [...output].length,
       wordCount: output.trim().split(/\s+/).filter(Boolean).length,
       missingProtected: [],
-      warnings: state.result.warnings.filter((warning) => !warning.startsWith("Protected terms missing")),
+      missingActions: [],
+      warnings: state.result.warnings.filter(
+        (warning) => !warning.startsWith("Protected terms missing") && !warning.startsWith("Action words missing"),
+      ),
     };
   }
   renderOutput();

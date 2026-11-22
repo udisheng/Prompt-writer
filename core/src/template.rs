@@ -423,6 +423,10 @@ mod tests {
                     assert!(body.contains("1,500"));
                     assert!(body.contains("stylized"));
                     assert!(body.contains("no negative_prompt"));
+                    assert!(body.contains("every action verb"));
+                    assert!(body.contains("true-to-life colours"));
+                    assert!(body.contains("do not add film grain"));
+                    assert!(body.contains("do not re-caption"));
                     assert!(!body.contains("integrated_multimodal_description"));
                     assert_eq!(template.max_chars, Some(1500));
                     assert_eq!(template.max_chars_kind, LimitKind::Suggested);
@@ -439,6 +443,9 @@ mod tests {
                     assert!(body.contains("1,500"));
                     assert!(body.contains("stylized"));
                     assert!(body.contains("no negative_prompt"));
+                    assert!(body.contains("every action verb"));
+                    assert!(body.contains("true-to-life colours"));
+                    assert!(body.contains("do not add film grain"));
                     assert_eq!(template.max_chars, Some(1500));
                     assert_eq!(template.max_chars_kind, LimitKind::Suggested);
                     assert_eq!(template.output, OutputKind::Text);
@@ -542,7 +549,7 @@ mod tests {
         assert_eq!(t2i.variant, "t2i");
         assert_eq!(t2i.title, "MiniMax H3-Image · Text to image");
 
-        const GOLDEN: &str = "The woman in <Picture 1> is <Subject 1>. One complete outfit from <Picture 2> is <Subject 2>. The bedroom in <Picture 3> is <Subject 3>. The target image is a mid close-up, waist-up, eye-level candid fashion snapshot of <Subject 1> sitting on the edge of the bed in <Subject 3>, wearing <Subject 2>, holding up a peace sign and giving a faint smile. <Subject 1> is partially preserved; her face, facial features, hairstyle, accessories, slim petite build, overall body proportions, silhouette, shoulder width, and scale remain as in <Picture 1>, while her pose, clothing, and setting change. Do not slim, enlarge, beautify, or reshape her figure. <Subject 2> is partially preserved; the garment's cut, fabric, colours, and details stay, worn as a loosely fitted top with a very short skirt, with ordinary cloth wrinkles rather than a stretched, tight fit. <Subject 3> is partially preserved; the room layout, bed, and lighting character remain, while the framing becomes a waist-up mid close-up of <Subject 1> on the bed. Shot on an 85mm lens at f/1.8 with soft window light from one side, a faint natural shadow under the collarbone, visible pores and slight skin unevenness, muted colours, mild film grain, and gentle background blur. The image should look like a candid photograph, not a retouched studio campaign. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.";
+        const GOLDEN: &str = "The woman in <Picture 1> is <Subject 1>. One complete outfit from <Picture 2> is <Subject 2>. The bedroom in <Picture 3> is <Subject 3>. The target image is a mid close-up, waist-up, eye-level photograph of <Subject 1> sitting on the edge of the bed in <Subject 3>, wearing <Subject 2>, torso upright, raising both hands in a peace sign, gaze toward the lens, and a faint smile. <Subject 1> is partially preserved; identity, face, hair, accessories, build, proportions, silhouette, shoulder width, and scale stay as in <Picture 1>, while her pose, clothing, and setting change. Do not slim, enlarge, beautify, or reshape her figure. <Subject 2> is partially preserved; cut, fabric, and colours stay, worn as a loosely fitted top with a very short skirt and ordinary cloth wrinkles rather than a stretched, tight fit. <Subject 3> is partially preserved; the room and the bed stay, framed as this waist-up mid close-up. Shot on an 85mm lens at f/1.8 in soft window light, with true-to-life colours, natural skin texture with visible pores, and realistic depth of field. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.";
         assert!(
             template.body.contains(GOLDEN),
             "edit template is missing the golden example"
@@ -617,5 +624,107 @@ mod tests {
         assert!(msg.contains("Wan 2.2"));
         assert!(!msg.contains("  a cat"));
         assert!(validate_idea("   ").is_err());
+    }
+
+    #[test]
+    fn h3_image_fixture_outputs_keep_actions_and_skip_default_film() {
+        use crate::actions::{action_addon, action_requirements, missing_action_terms};
+
+        let edit_template = parse_template(
+            "minimax-h3-image-edit.md",
+            bundled_by_id("minimax-h3-image-edit").unwrap(),
+        )
+        .unwrap();
+        let t2i_template = parse_template(
+            "minimax-h3-image-t2i.md",
+            bundled_by_id("minimax-h3-image-t2i").unwrap(),
+        )
+        .unwrap();
+
+        // Hand-written outputs. No provider key was available in this environment,
+        // so these follow the template instead of a live model reply.
+        let fixtures = [
+            (
+                "golden edit",
+                true,
+                "A hyper-realistic middle shot fashion cosplay photograph of a slender lady from <Picture 1> with naturally small chest. Her facial features and accessories remain the same as <Picture 1>. Peace sign, wearing one of the outfits from <Picture 2>, background is <Picture 3>, very short skirt, sitting on the bed, faint smile. 85mm f/1.8, middle close up, masterpiece, best quality, photorealistic.",
+                "The woman in <Picture 1> is <Subject 1>. One complete outfit from <Picture 2> is <Subject 2>. The bedroom in <Picture 3> is <Subject 3>. The target image is a mid close-up, waist-up, eye-level photograph of <Subject 1> sitting on the edge of the bed in <Subject 3>, wearing <Subject 2>, torso upright, raising both hands in a peace sign, gaze toward the lens, and a faint smile. <Subject 1> is partially preserved; identity, face, hair, accessories, build, proportions, silhouette, shoulder width, and scale stay as in <Picture 1>, while her pose, clothing, and setting change. Do not slim, enlarge, beautify, or reshape her figure. <Subject 2> is partially preserved; cut, fabric, and colours stay, worn as a loosely fitted top with a very short skirt and ordinary cloth wrinkles rather than a stretched, tight fit. <Subject 3> is partially preserved; the room and the bed stay, framed as this waist-up mid close-up. Shot on an 85mm lens at f/1.8 in soft window light, with true-to-life colours, natural skin texture with visible pores, and realistic depth of field. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.",
+            ),
+            (
+                "walking with coffee",
+                true,
+                "The woman from <Picture 1> walking toward the camera holding coffee, wearing the coat from <Picture 2>, on the street in <Picture 3>.",
+                "The woman in <Picture 1> is <Subject 1>. The coat in <Picture 2> is <Subject 2>. The street in <Picture 3> is <Subject 3>. The target image is an eye-level photograph of <Subject 1> walking toward the camera on <Subject 3>, wearing <Subject 2>, holding coffee in her right hand at her side, left arm swinging, and her gaze on the lens. <Subject 1> is partially preserved; identity, face, hair, accessories, build, proportions, silhouette, shoulder width, and scale stay as in <Picture 1>, while her pose, clothing, and setting change. Do not slim, enlarge, beautify, or reshape her figure. <Subject 2> is partially preserved; the coat's cut, fabric, and colours stay, worn loosely with ordinary cloth wrinkles rather than a stretched, tight fit. <Subject 3> is partially preserved; the street stays behind her. Natural daylight, true-to-life colours, natural skin texture with visible pores, and realistic depth of field. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.",
+            ),
+            (
+                "leaning on a railing",
+                true,
+                "The man from <Picture 1> leaning on a railing looking over his shoulder, jacket from <Picture 2>, rooftop from <Picture 3>.",
+                "The man in <Picture 1> is <Subject 1>. The jacket in <Picture 2> is <Subject 2>. The rooftop in <Picture 3> is <Subject 3>. The target image is an eye-level photograph of <Subject 1> leaning on a railing on <Subject 3>, wearing <Subject 2>, one forearm resting on the rail, torso turned away, looking over his shoulder, and his gaze back toward the lens. <Subject 1> is partially preserved; identity, face, hair, accessories, build, proportions, silhouette, shoulder width, and scale stay as in <Picture 1>, while his pose, clothing, and setting change. Do not slim, enlarge, beautify, or reshape his figure. <Subject 2> is partially preserved; the jacket's cut, fabric, and colours stay, worn loosely with ordinary cloth wrinkles rather than a stretched, tight fit. <Subject 3> is partially preserved; the rooftop stays. Natural daylight, true-to-life colours, natural skin texture with visible pores, and realistic depth of field. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.",
+            ),
+            (
+                "hand turning a bottle",
+                false,
+                "Product close-up of a hand turning a bottle on a wooden table, soft daylight.",
+                "A close-up photograph of a hand turning a bottle on a wooden table. The fingers wrap the bottle and the wrist rotates it a quarter turn toward the viewer. Soft daylight, true-to-life colours, natural skin texture with visible pores, and realistic depth of field. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.",
+            ),
+        ];
+
+        for (name, edit, idea, expected) in fixtures {
+            let template = if edit { &edit_template } else { &t2i_template };
+            let requirements = action_requirements(idea, edit);
+            assert!(
+                !requirements.terms.is_empty(),
+                "{name} produced no action terms"
+            );
+            let system = format!(
+                "{}{}",
+                render_system(template, None),
+                action_addon(&requirements)
+            );
+            assert!(system.contains("Actions to keep"), "{name} addon");
+            assert!(
+                system.to_lowercase().contains("every action verb"),
+                "{name} template rule"
+            );
+            for term in &requirements.terms {
+                assert!(
+                    system
+                        .to_ascii_lowercase()
+                        .contains(&term.to_ascii_lowercase()),
+                    "{name} system prompt is missing the action term {term}"
+                );
+            }
+            let missing = missing_action_terms(expected, &requirements);
+            assert!(
+                missing.is_empty(),
+                "{name} expected output dropped {missing:?}; terms were {:?}",
+                requirements.terms
+            );
+            let lower = expected.to_ascii_lowercase();
+            for banned in [
+                "film grain",
+                "35mm",
+                "muted colours",
+                "muted colors",
+                "vintage",
+            ] {
+                assert!(!lower.contains(banned), "{name} contains {banned}");
+            }
+        }
+
+        let dropped = "The woman in <Picture 1> is <Subject 1>. The target image is a portrait of <Subject 1> in the bedroom. <Subject 1> is partially preserved; identity stays, while her pose changes.";
+        let requirements = action_requirements(fixtures[0].2, true);
+        let missing = missing_action_terms(dropped, &requirements);
+        assert!(
+            missing
+                .iter()
+                .any(|term| term.eq_ignore_ascii_case("sitting"))
+        );
+        assert!(
+            missing
+                .iter()
+                .any(|term| term.eq_ignore_ascii_case("peace sign"))
+        );
     }
 }

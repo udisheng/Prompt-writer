@@ -1,3 +1,4 @@
+mod actions;
 mod error;
 mod history;
 mod http;
@@ -8,6 +9,10 @@ mod secret_file;
 mod settings;
 mod template;
 
+pub use actions::{
+    ActionRequirements, action_addon, action_requirements, action_warning, combined_retry,
+    missing_action_terms,
+};
 pub use error::RewriteError;
 pub use history::{HISTORY_LIMIT, HistoryEntry, delete_history, push_history};
 pub use http::{
