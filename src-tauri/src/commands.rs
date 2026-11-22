@@ -6,9 +6,9 @@ use rewriter_core::{
     Backend, ChatParams, HistoryEntry, LimitKind, MeasuredPrompt, ModelInfo, OPENROUTER_BASE,
     OutputKind, ProviderKind, Settings, Template, build_chat_request, build_user_message,
     bundled_by_id, chat_complete, corrective_message, format_keyword_text, list_ollama_models,
-    list_openrouter_models, measure, missing_terms, missing_warning, ollama_tags_url,
-    parse_keyword_document, parse_output, protection_for, push_history, render_system,
-    run_keyword_line, should_retry_protection, strip_inline_braces, system_addon,
+    list_openrouter_models, measure, migrate_template_id, missing_terms, missing_warning,
+    ollama_tags_url, parse_keyword_document, parse_output, protection_for, push_history,
+    render_system, run_keyword_line, should_retry_protection, strip_inline_braces, system_addon,
     validate_duration, validate_idea,
 };
 use serde::{Deserialize, Serialize};
@@ -367,16 +367,17 @@ pub async fn rewrite(
             "Lines that start with / are keyword commands. They are not sent to the model.".into(),
         );
     }
+    let template_id = migrate_template_id(&input.template_id);
     let path_name =
-        rewriter_core::template_filename(&input.template_id).map_err(|err| err.to_string())?;
+        rewriter_core::template_filename(&template_id).map_err(|err| err.to_string())?;
     let path = state.templates_dir.join(&path_name);
     if !path.exists() {
-        if let Ok(bundled) = bundled_by_id(&input.template_id) {
+        if let Ok(bundled) = bundled_by_id(&template_id) {
             fs::write(&path, bundled)
                 .map_err(|err| format!("Could not restore the template: {err}"))?;
         }
     }
-    let template = files::read_template_file(&state.templates_dir, &input.template_id)?;
+    let template = files::read_template_file(&state.templates_dir, &template_id)?;
     let duration =
         validate_duration(&template.id, input.duration_secs).map_err(|err| err.to_string())?;
     let saved_keywords = parse_keyword_document(&files::load_keyword_text(&state.keywords_path));

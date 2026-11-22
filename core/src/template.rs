@@ -1,5 +1,5 @@
 use crate::error::RewriteError;
-use include_dir::{include_dir, Dir};
+use include_dir::{Dir, include_dir};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
@@ -86,7 +86,9 @@ pub fn valid_template_id(id: &str) -> bool {
 
 pub fn template_filename(id: &str) -> Result<String, RewriteError> {
     if !valid_template_id(id) {
-        return Err(RewriteError::Template(format!("Unknown template id `{id}`.")));
+        return Err(RewriteError::Template(format!(
+            "Unknown template id `{id}`."
+        )));
     }
     Ok(format!("{id}.md"))
 }
@@ -140,7 +142,7 @@ pub fn parse_template(filename: &str, source: &str) -> Result<Template, RewriteE
         other => {
             return Err(RewriteError::Template(format!(
                 "{filename}: output `{other}` must be text or wan_pair."
-            )))
+            )));
         }
     };
     let max_chars_kind = match meta.get("max_chars_kind").map(String::as_str) {
@@ -150,7 +152,7 @@ pub fn parse_template(filename: &str, source: &str) -> Result<Template, RewriteE
         Some(other) => {
             return Err(RewriteError::Template(format!(
                 "{filename}: max_chars_kind `{other}` must be model or suggested."
-            )))
+            )));
         }
     };
     Ok(Template {
@@ -173,14 +175,16 @@ pub fn duration_clock(seconds: u32) -> String {
 
 pub fn duration_bounds(template_id: &str) -> Option<(&'static str, u32, u32)> {
     match template_id {
-        "minimax-h3" => Some(("MiniMax H3", 4, 15)),
         "seedance-2.5" => Some(("Seedance 2.5", 4, 30)),
         id if id.starts_with("seedance-") => Some(("Seedance", 4, 15)),
         _ => None,
     }
 }
 
-pub fn validate_duration(template_id: &str, duration: Option<u32>) -> Result<Option<u32>, RewriteError> {
+pub fn validate_duration(
+    template_id: &str,
+    duration: Option<u32>,
+) -> Result<Option<u32>, RewriteError> {
     let Some((label, min, max)) = duration_bounds(template_id) else {
         return Ok(None);
     };
@@ -236,7 +240,10 @@ pub fn validate_idea(idea: &str) -> Result<String, RewriteError> {
     Ok(idea.to_string())
 }
 
-fn split_frontmatter<'a>(filename: &str, source: &'a str) -> Result<(BTreeMap<String, String>, &'a str), RewriteError> {
+fn split_frontmatter<'a>(
+    filename: &str,
+    source: &'a str,
+) -> Result<(BTreeMap<String, String>, &'a str), RewriteError> {
     let rest = source
         .strip_prefix("---\n")
         .or_else(|| source.strip_prefix("---\r\n"))
@@ -277,7 +284,11 @@ fn split_frontmatter<'a>(filename: &str, source: &'a str) -> Result<(BTreeMap<St
     Ok((map, body))
 }
 
-fn required(meta: &BTreeMap<String, String>, key: &str, filename: &str) -> Result<String, RewriteError> {
+fn required(
+    meta: &BTreeMap<String, String>,
+    key: &str,
+    filename: &str,
+) -> Result<String, RewriteError> {
     meta.get(key)
         .filter(|value| !value.is_empty())
         .cloned()
@@ -295,9 +306,10 @@ fn optional_usize(
     if value.is_empty() {
         return Ok(None);
     }
-    value.parse::<usize>().map(Some).map_err(|_| {
-        RewriteError::Template(format!("{filename}: `{key}` must be a whole number."))
-    })
+    value
+        .parse::<usize>()
+        .map(Some)
+        .map_err(|_| RewriteError::Template(format!("{filename}: `{key}` must be a whole number.")))
 }
 
 #[cfg(test)]
@@ -317,27 +329,38 @@ mod tests {
 
     #[test]
     fn duration_placeholder_does_not_eat_the_clock() {
-        let raw = bundled_by_id("minimax-h3").unwrap();
-        let template = parse_template("minimax-h3.md", raw).unwrap();
+        let template = parse_template(
+            "clock-sample.md",
+            "---\nid: clock-sample\nfamily: sample\nvariant: sample\ntitle: Clock sample\noutput: text\n---\n\nThe clip is exactly {{duration}} seconds and ends at {{duration_clock}}.\n",
+        )
+        .unwrap();
         let system = render_system(&template, Some(6));
-        assert!(system.contains("6 seconds") || system.contains("exactly 6"));
+        assert!(system.contains("exactly 6 seconds"));
         assert!(system.contains("00:06.000"));
         assert!(!system.contains("{{duration"));
-        assert!(system.contains("integrated_multimodal_description"));
-        assert!(system.contains("overall_soundscape"));
-        assert!(system.contains("non_diegetic_music"));
-        assert!(system.contains("[Shot"));
+        let seedance =
+            parse_template("seedance-1.0.md", bundled_by_id("seedance-1.0").unwrap()).unwrap();
+        let rendered = render_system(&seedance, Some(6));
+        assert!(rendered.contains("--duration 6") || rendered.contains("6 seconds"));
+        assert!(!rendered.contains("{{duration"));
     }
 
     #[test]
     fn duration_bounds() {
-        assert!(validate_duration("minimax-h3", Some(3)).is_err());
-        assert!(validate_duration("minimax-h3", Some(16)).is_err());
-        assert_eq!(validate_duration("minimax-h3", Some(4)).unwrap(), Some(4));
-        assert_eq!(validate_duration("minimax-h3", Some(15)).unwrap(), Some(15));
+        assert_eq!(
+            validate_duration("minimax-h3-image-t2i", Some(9)).unwrap(),
+            None
+        );
+        assert_eq!(
+            validate_duration("minimax-h3-image-edit", None).unwrap(),
+            None
+        );
         assert_eq!(validate_duration("wan22-t2v", Some(9)).unwrap(), None);
         assert!(validate_duration("seedance-2.5", None).is_err());
-        assert_eq!(validate_duration("seedance-2.5", Some(30)).unwrap(), Some(30));
+        assert_eq!(
+            validate_duration("seedance-2.5", Some(30)).unwrap(),
+            Some(30)
+        );
         assert!(validate_duration("seedance-2.5", Some(31)).is_err());
         assert!(validate_duration("seedance-2.0", Some(16)).is_err());
         assert_eq!(validate_duration("seedance-1.0", Some(5)).unwrap(), Some(5));
@@ -346,10 +369,11 @@ mod tests {
     #[test]
     fn bundled_templates_match_the_research_rules() {
         let files = bundled_templates();
-        assert!(files.len() >= 8, "expected the eight model templates");
+        assert!(files.len() >= 9, "expected the nine model templates");
         let mut ids = Vec::new();
         for (name, source) in files {
-            let template = parse_template(name, source).unwrap_or_else(|err| panic!("{name}: {err}"));
+            let template =
+                parse_template(name, source).unwrap_or_else(|err| panic!("{name}: {err}"));
             assert!(!template.body.is_empty(), "{name} body");
             assert!(
                 template.body.to_lowercase().contains("only"),
@@ -387,15 +411,37 @@ mod tests {
                     assert_eq!(template.max_chars, Some(800));
                     assert_eq!(template.output, OutputKind::WanPair);
                 }
-                "minimax-h3" => {
-                    assert!(body.contains("integrated_multimodal_description"));
-                    assert!(body.contains("overall_soundscape"));
-                    assert!(body.contains("non_diegetic_music"));
-                    assert!(body.contains("[shot"));
-                    assert!(body.contains("7000"));
-                    assert!(body.contains("picture 1"));
-                    assert!(body.contains("hailuo"));
-                    assert_eq!(template.max_chars, Some(7000));
+                "minimax-h3-image-edit" => {
+                    assert!(body.contains("<picture 1>"));
+                    assert!(body.contains("<subject 1>"));
+                    assert!(body.contains("partially preserved"));
+                    assert!(body.contains("do not slim, enlarge, beautify, or reshape"));
+                    assert!(body.contains("loosely fitted"));
+                    assert!(body.contains("ordinary cloth wrinkles"));
+                    assert!(body.contains("beauty-filter smoothing"));
+                    assert!(body.contains("the image contains no text, letters or numbers."));
+                    assert!(body.contains("1,500"));
+                    assert!(body.contains("stylized"));
+                    assert!(body.contains("no negative_prompt"));
+                    assert!(!body.contains("integrated_multimodal_description"));
+                    assert_eq!(template.max_chars, Some(1500));
+                    assert_eq!(template.max_chars_kind, LimitKind::Suggested);
+                    assert_eq!(template.output, OutputKind::Text);
+                    assert!(template.negative_max_chars.is_none());
+                }
+                "minimax-h3-image-t2i" => {
+                    assert!(body.contains("no reference images"));
+                    assert!(body.contains("do not invent"));
+                    assert!(body.contains("flowing paragraphs"));
+                    assert!(body.contains("2 rows and 3 columns"));
+                    assert!(body.contains("beauty-filter smoothing"));
+                    assert!(body.contains("the image contains no text, letters or numbers."));
+                    assert!(body.contains("1,500"));
+                    assert!(body.contains("stylized"));
+                    assert!(body.contains("no negative_prompt"));
+                    assert_eq!(template.max_chars, Some(1500));
+                    assert_eq!(template.max_chars_kind, LimitKind::Suggested);
+                    assert_eq!(template.output, OutputKind::Text);
                 }
                 "seedance-2.0" => {
                     assert!(body.contains("shot 1"));
@@ -433,8 +479,19 @@ mod tests {
                     assert!(body.contains("300"));
                     assert_eq!(template.max_words, Some(600));
                     // field notes: labelled lines, one pose each, references bind by number, POV, era
-                    for label in ["action:", "subjects:", "outfits:", "background:", "lighting:", "camera:", "style:"] {
-                        assert!(body.contains(label), "seedream-generate is missing the {label} line");
+                    for label in [
+                        "action:",
+                        "subjects:",
+                        "outfits:",
+                        "background:",
+                        "lighting:",
+                        "camera:",
+                        "style:",
+                    ] {
+                        assert!(
+                            body.contains(label),
+                            "seedream-generate is missing the {label} line"
+                        );
                     }
                     assert!(body.contains("one pose and one main action per person"));
                     assert!(body.contains("both hands"));
@@ -457,7 +514,99 @@ mod tests {
         }
         ids.sort();
         ids.dedup();
-        assert_eq!(ids.len(), 8);
+        assert_eq!(ids.len(), 9);
+        assert!(!ids.iter().any(|id| id == "minimax-h3"));
+    }
+
+    #[test]
+    fn h3_image_edit_loads_and_protected_terms_survive_postprocessing() {
+        use crate::parse::{measure, parse_output};
+        use crate::protect::{
+            corrective_message, missing_terms, protection_for, run_keyword_line,
+            should_retry_protection, strip_inline_braces, system_addon,
+        };
+
+        assert!(bundled_by_id("minimax-h3").is_err());
+        let template = parse_template(
+            "minimax-h3-image-edit.md",
+            bundled_by_id("minimax-h3-image-edit").unwrap(),
+        )
+        .unwrap();
+        let t2i = parse_template(
+            "minimax-h3-image-t2i.md",
+            bundled_by_id("minimax-h3-image-t2i").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(template.family, "minimax-h3-image");
+        assert_eq!(template.variant, "edit");
+        assert_eq!(t2i.variant, "t2i");
+        assert_eq!(t2i.title, "MiniMax H3-Image · Text to image");
+
+        const GOLDEN: &str = "The woman in <Picture 1> is <Subject 1>. One complete outfit from <Picture 2> is <Subject 2>. The bedroom in <Picture 3> is <Subject 3>. The target image is a mid close-up, waist-up, eye-level candid fashion snapshot of <Subject 1> sitting on the edge of the bed in <Subject 3>, wearing <Subject 2>, holding up a peace sign and giving a faint smile. <Subject 1> is partially preserved; her face, facial features, hairstyle, accessories, slim petite build, overall body proportions, silhouette, shoulder width, and scale remain as in <Picture 1>, while her pose, clothing, and setting change. Do not slim, enlarge, beautify, or reshape her figure. <Subject 2> is partially preserved; the garment's cut, fabric, colours, and details stay, worn as a loosely fitted top with a very short skirt, with ordinary cloth wrinkles rather than a stretched, tight fit. <Subject 3> is partially preserved; the room layout, bed, and lighting character remain, while the framing becomes a waist-up mid close-up of <Subject 1> on the bed. Shot on an 85mm lens at f/1.8 with soft window light from one side, a faint natural shadow under the collarbone, visible pores and slight skin unevenness, muted colours, mild film grain, and gentle background blur. The image should look like a candid photograph, not a retouched studio campaign. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.";
+        assert!(
+            template.body.contains(GOLDEN),
+            "edit template is missing the golden example"
+        );
+        assert!(
+            GOLDEN.chars().count() <= 1500,
+            "golden example is {} characters",
+            GOLDEN.chars().count()
+        );
+
+        let idea = "A portrait of {{Mika}} from <Picture 1>, trigger sks_mika, peace sign.";
+        let saved = vec!["sks_mika".to_string()];
+        let protection = protection_for(idea, &saved);
+        assert!(protection.inline.iter().any(|term| term == "Mika"));
+        assert!(protection.required.iter().any(|term| term == "sks_mika"));
+        assert!(protection.required.iter().any(|term| term == "Mika"));
+        let addon = system_addon(&protection.required);
+        assert!(addon.contains("sks_mika"));
+        assert!(addon.contains("Mika"));
+        let user = build_user_message(&template, idea, None);
+        assert!(user.contains("MiniMax H3-Image · Edit"));
+        assert!(user.contains("sks_mika"));
+        assert!(!user.contains("Duration:"));
+
+        let reply = "```\nThe woman in <Picture 1> is <Subject 1>. {{Mika}} holds a peace sign. sks_mika stays.\n```";
+        let parsed = parse_output(template.output, reply);
+        let stripped = strip_inline_braces(&parsed.output, &protection.inline);
+        assert!(stripped.contains("Mika"));
+        assert!(!stripped.contains("{{"));
+        assert!(stripped.contains("sks_mika"));
+        assert!(missing_terms(&stripped, &protection.required).is_empty());
+
+        let dropped = "The woman in <Picture 1> is <Subject 1>.";
+        let missing = missing_terms(dropped, &protection.required);
+        assert_eq!(missing.len(), 2);
+        assert!(should_retry_protection(0, &missing));
+        assert!(!should_retry_protection(1, &missing));
+        let corrective = corrective_message(&missing);
+        assert!(corrective.contains("sks_mika"));
+        assert!(corrective.contains("Mika"));
+
+        let parsed_long = parse_output(template.output, &format!("```\n{}\n```", "x".repeat(1600)));
+        assert!(
+            parsed_long.negative.is_none(),
+            "a text target has no negative field"
+        );
+        let measured = measure(&template, parsed_long);
+        assert!(measured.over_limit);
+        assert!(measured.negative.is_none());
+        assert!(
+            measured
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("suggested length"))
+        );
+
+        let shown = run_keyword_line(&saved, "/show key");
+        assert!(shown.handled);
+        assert!(!shown.changed);
+        assert!(shown.message.contains("sks_mika"));
+        let added = run_keyword_line(&saved, "/add key peace sign");
+        assert!(added.changed);
+        assert!(added.keywords.iter().any(|keyword| keyword == "peace sign"));
+        assert!(added.keywords.iter().any(|keyword| keyword == "sks_mika"));
     }
 
     #[test]

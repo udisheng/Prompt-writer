@@ -3,6 +3,19 @@ use serde::{Deserialize, Serialize};
 pub const DEFAULT_HOTKEY: &str = "Ctrl+Shift+Space";
 pub const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 pub const DEFAULT_TEMPLATE: &str = "wan22-t2v";
+/// Removed MiniMax H3 video target. Saved settings that still name it load as text-to-image.
+pub const RETIRED_MINIMAX_H3_TEMPLATE: &str = "minimax-h3";
+pub const MINIMAX_H3_IMAGE_T2I: &str = "minimax-h3-image-t2i";
+
+/// Map a saved or requested template id onto a template that still exists.
+pub fn migrate_template_id(id: &str) -> String {
+    let id = id.trim();
+    if id == RETIRED_MINIMAX_H3_TEMPLATE {
+        MINIMAX_H3_IMAGE_T2I.to_string()
+    } else {
+        id.to_string()
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -56,7 +69,7 @@ impl Settings {
         }
         self.openrouter_model = self.openrouter_model.trim().to_string();
         self.ollama_model = self.ollama_model.trim().to_string();
-        self.default_template_id = self.default_template_id.trim().to_string();
+        self.default_template_id = migrate_template_id(&self.default_template_id);
         if self.default_template_id.is_empty() {
             self.default_template_id = DEFAULT_TEMPLATE.to_string();
         }
@@ -84,5 +97,21 @@ mod tests {
         assert_eq!(clamp_temperature(3.2), 2.0);
         assert_eq!(clamp_temperature(-1.0), 0.0);
         assert_eq!(clamp_temperature(f32::NAN), 0.4);
+    }
+
+    #[test]
+    fn retired_minimax_h3_setting_migrates_and_still_parses() {
+        let raw = r#"{"backend":"openrouter","openrouterModel":"google/gemma-2-9b-it:free","ollamaBaseUrl":"http://localhost:11434","ollamaModel":"","hotkey":"Ctrl+Shift+Space","defaultTemplateId":"minimax-h3","temperature":0.4}"#;
+        let settings: Settings = serde_json::from_str(raw).unwrap();
+        assert_eq!(settings.default_template_id, "minimax-h3");
+        let settings = settings.normalized();
+        assert_eq!(settings.default_template_id, MINIMAX_H3_IMAGE_T2I);
+        assert_eq!(settings.openrouter_model, "google/gemma-2-9b-it:free");
+        assert_eq!(migrate_template_id(" minimax-h3 "), MINIMAX_H3_IMAGE_T2I);
+        assert_eq!(migrate_template_id("wan22-t2v"), "wan22-t2v");
+        assert_eq!(
+            migrate_template_id("minimax-h3-image-edit"),
+            "minimax-h3-image-edit"
+        );
     }
 }

@@ -134,7 +134,9 @@ function previewSettings(): SettingsView {
   };
   if (!saved) return base;
   try {
-    return { ...base, ...JSON.parse(saved) };
+    const parsed = { ...base, ...JSON.parse(saved) } as SettingsView;
+    if (parsed.defaultTemplateId === "minimax-h3") parsed.defaultTemplateId = "minimax-h3-image-t2i";
+    return parsed;
   } catch {
     return base;
   }
@@ -147,7 +149,8 @@ function storePreview(settings: SettingsView) {
 const PREVIEW_TEMPLATES: TemplateSummary[] = [
   { id: "wan22-t2v", family: "wan22", variant: "t2v", title: "Wan 2.2 · Text to video", maxChars: 800, maxCharsKind: "model", maxWords: null, negativeMaxChars: 500, output: "wan_pair" },
   { id: "wan22-i2v", family: "wan22", variant: "i2v", title: "Wan 2.2 · Image to video", maxChars: 800, maxCharsKind: "model", maxWords: 100, negativeMaxChars: 500, output: "wan_pair" },
-  { id: "minimax-h3", family: "minimax-h3", variant: "t2va", title: "MiniMax H3", maxChars: 7000, maxCharsKind: "model", maxWords: null, negativeMaxChars: null, output: "text" },
+  { id: "minimax-h3-image-t2i", family: "minimax-h3-image", variant: "t2i", title: "MiniMax H3-Image · Text to image", maxChars: 1500, maxCharsKind: "suggested", maxWords: null, negativeMaxChars: null, output: "text" },
+  { id: "minimax-h3-image-edit", family: "minimax-h3-image", variant: "edit", title: "MiniMax H3-Image · Edit", maxChars: 1500, maxCharsKind: "suggested", maxWords: null, negativeMaxChars: null, output: "text" },
   { id: "seedance-1.0", family: "seedance", variant: "1.0", title: "Seedance 1.0", maxChars: 2000, maxCharsKind: "suggested", maxWords: null, negativeMaxChars: null, output: "text" },
   { id: "seedance-2.0", family: "seedance", variant: "2.0", title: "Seedance 2.0", maxChars: 2500, maxCharsKind: "suggested", maxWords: null, negativeMaxChars: null, output: "text" },
   { id: "seedance-2.5", family: "seedance", variant: "2.5", title: "Seedance 2.5", maxChars: 4000, maxCharsKind: "suggested", maxWords: null, negativeMaxChars: null, output: "text" },
@@ -168,8 +171,8 @@ function previewRewrite(idea: string, templateId: string, duration: number | nul
     if (templateId === "wan22-i2v" && !/camera/i.test(idea)) {
       output = `fixed camera. ${idea.trim()}`;
     }
-  } else if (templateId === "minimax-h3") {
-    output = `integrated_multimodal_description: [Shot 1] Live-action, cinematic. ${idea.trim()} The camera holds a static shot.\n\noverall_soundscape: Room tone and a single footstep.\n\nnon_diegetic_music: N/A`;
+  } else if (templateId === "minimax-h3-image-edit" || templateId === "minimax-h3-image-t2i" || templateId === "minimax-h3") {
+    output = `${idea.trim()} Visible pores and slight skin unevenness, muted colours, mild film grain. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.`;
   } else if (templateId === "seedance-2.0") {
     output = `Shot 1: locked-off camera. ${idea.trim()}\nkeep it subtitle-free.`;
   } else if (templateId === "seedance-2.5") {

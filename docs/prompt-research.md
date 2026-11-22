@@ -1,6 +1,6 @@
-# Prompt-writing research for Wan 2.2, MiniMax H3, Seedance, and Seedream
+# Prompt-writing research for Wan 2.2, MiniMax H3-Image, Seedance, and Seedream
 
-**Research date:** 17 November 2026 (Asia/Singapore, UTC+8)  
+**Research date:** 17 November 2026 (Asia/Singapore, UTC+8) for Wan, Seedance, and Seedream. **Section 2 was replaced on 22 November 2026:** the app target is MiniMax-H3-Image (still image), not the MiniMax-H3 video model.  
 **Scope:** Official docs and official model guides first; then fal.ai, Replicate, ComfyUI, and well-regarded community guides. This document is planning research only. No application code is included.
 
 The planned Windows overlay app rewrites a user's rough prompt into the **target model's preferred full prompt text**. The rewriter itself talks to an LLM via OpenRouter or local Ollama (see [Section 5](#5-app-note-openrouter-and-ollama-apis)). It does not call the video/image generators.
@@ -12,7 +12,7 @@ The planned Windows overlay app rewrites a user's rough prompt into the **target
 | Family | Versions this guidance covers | Notes |
 | --- | --- | --- |
 | **Wan (Alibaba)** | **Wan 2.2** is the requested target. Official prompt formulas are shared across the Wan family. Sound/audio formulas apply only to **Wan 2.5 / 2.6 / 2.7 / 3.0**, not 2.2. | Open-weights 2.2 variants: `Wan2.2-T2V-A14B`, `Wan2.2-I2V-A14B`, `Wan2.2-TI2V-5B` (Apache 2.0). Cloud Model Studio also lists `wan2.2-t2v-plus` and I2V plus/flash. Later Wan versions exist; do not apply their audio formulas to 2.2. |
-| **MiniMax** | User wrote **"MiniMax H3"**. This is almost certainly the official **MiniMax-H3** video model (Hailuo 03 / Hailuo 3.0 generation), **not** Hailuo 02 / 2.3. See [Section 2](#2-minimax-h3). | Official IDs: `MiniMax-H3`, `MiniMax-H3-Highspeed`, `MiniMax-H3-Lite`, `MiniMax-H3-Max`. Older Hailuo models still exist and use a different camera syntax. |
+| **MiniMax** | **MiniMax-H3-Image**, the still-image model (text-to-image and image edit). See [Section 2](#2-minimax-h3-image). The earlier video target **MiniMax-H3** was removed from the app on 22 November 2026. | Model ID `MiniMax-H3-Image`. Up to 16 reference images. No `negative_prompt`. Official default output area for best results is **4K**. |
 | **Seedance (ByteDance video)** | **1.0 Pro / Pro Fast**, **2.0 series**, **2.5 / 2.5 flash**. A **1.5 Pro** official guide also exists. Prompt syntax is **not identical** across generations. | 2.5 is the current flagship formula (timestamps + Shot N, up to 30s, multimodal refs). 2.0 does **not** reliably follow timestamps. 1.0 uses `camera/scene switch` and trailing `--parameter` flags. |
 | **Seedream (ByteDance image)** | **3.0** (legacy), official **4.0 / 4.5** prompt guide, current **5.0 lite / 5.0 pro / 5.0 flash**, and **5.5** already listed in the BytePlus image API. | 4.0+ prefers concise natural language over ornate keyword stacks. Quoted on-image text is official through 4.x and still recommended in 5.x community/platform guides. 5.0 pro/flash add coordinate-based interactive editing. |
 
@@ -182,193 +182,106 @@ Three later guides are folded into the Wan templates on top of the official form
 
 ---
 
-## 2. MiniMax H3
+## 2. MiniMax-H3-Image
 
-### What "MiniMax H3" most likely is
+### What this section covers
 
-**Conclusion:** The user almost certainly means the official **MiniMax-H3** video model (the Hailuo 03 / "H3" generation), **not** Hailuo 02 or Hailuo 2.3.
+**Conclusion:** The app target is **MiniMax-H3-Image**, the open-weight still-image model, not MiniMax-H3 video (Hailuo).
 
-**Confidence: high (about 90–95%).** Reasons:
+MiniMax announced H3-Image on **11 November 2026** as an image model built on H3. It does text-to-image, reference-based generation, and image editing, up to **16 reference images**, and can emit a 4K (4096×4096, about 16 MP) image. The canonical model ID is `MiniMax-H3-Image`. A high-speed variant, `MiniMax-H3-Image-Highspeed`, shares the same prompt limits.
 
-1. MiniMax officially announced **MiniMax H3** on **31 July 2026** as a general-purpose multimodal generation model: unified text/image/video/audio context, native stereo sound, up to **15 seconds** at up to **2K**. The post explicitly places it after Hailuo 01 and Hailuo 02: "From Hailuo 01 and Hailuo 02 to H3."
-2. Official platform docs (read November 2026) say MiniMax's current video model is **MiniMax-H3**, and the Video Generation V2 API is described as the **"Hailuo-03" API**. Supported model IDs: `MiniMax-H3`, `MiniMax-H3-Highspeed`, `MiniMax-H3-Lite`, `MiniMax-H3-Max`.
-3. Official GitHub org `MiniMax-AI/MiniMax-H3` ships a first-party skill, `h3-prompt-writing`, with a detailed English prompt-writing guide (`references/base-en.txt`, `ref-en.txt`).
-4. Older models remain documented separately on the **v1** text-to-video API: `MiniMax-Hailuo-2.3`, `MiniMax-Hailuo-02`, `T2V-01-Director`, `T2V-01`. Those are real, but they are not named "H3."
-5. Some secondary articles also call H3 "Hailuo 3.0" or "Hailuo 03." That alias is plausible given MiniMax's own "Hailuo-03 API" wording, but the **canonical product name and model ID are MiniMax-H3**.
+The previous app target, MiniMax-H3 **video** (labelled shots, soundscape, score, 4–15 seconds, 7,000-character cap), was removed on 22 November 2026. A saved default of `minimax-h3` loads as the new text-to-image target. The fal.ai page [MiniMax H3 Prompting Guide + 44 Video Examples](https://fal.ai/learn/devs/minimax-h3-prompting-guide) (31 July 2026) is that video model: 5–15 seconds, 7,000 characters, shot lists and audio. Do not use it to write H3-Image prompts.
 
-If the app needs a fallback for users who still generate on older Hailuo endpoints, keep a **legacy Hailuo 02 / 2.3 / T2V-01-Director** profile (bracket camera commands, 2000-character cap). Default the "MiniMax H3" preset to **MiniMax-H3**.
+### Tasks and hard limits
 
-### Versions this H3 guidance applies to
+From the official README and the platform image-generation guide, read 22 November 2026:
 
-- Official prompt skill and video-generation guide for **MiniMax-H3** (and the Highspeed / Lite / Max variants, which share the V2 multimodal content API).
-- Duration: integer **4–15 seconds** (docs also show a common default around 5–6s). Resolutions: **768P / 2K**. Prompt hard limit: **≤ 7,000 characters**.
-- Modes: **T2VA** (text-to-video+audio), **I2VA** (first frame), **FL2VA** (first and last frames), **L2VA** (last frame only), **Ref2VA** (reference images/videos/audio). Official input caps include: first/last frames 0–2 images; references ≤ 9 images, ≤ 3 videos, ≤ 3 audio, mixed total ≤ 12 files.
-
-### Recommended structure / formula templates
-
-Official H3 rewrites use **named fields in a fixed order**, written in **English** (preserve dialogue, lyrics, and on-screen text in the original language).
-
-**T2VA (text only) — official three core fields:**
-
-```text
-integrated_multimodal_description: [Shot 1] [Style], [composition]. [subjects, environment, actions]. The camera [motion type] [with small/large amplitude] [at slow/fast speed]. Speaker (S1) says: <d>[Language] verbatim dialogue</d> [Shot 2] At 00:05.000, the camera cuts to ...
-
-overall_soundscape: [ambient + physical action + non-verbal human sounds across the whole clip]
-
-non_diegetic_music: [instrumentation, tempo, rhythm, dynamics — or N/A]
-```
-
-**I2VA — instruction line first, then the three fields:**
-
-```text
-For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
-
-integrated_multimodal_description: ...
-overall_soundscape: ...
-non_diegetic_music: ...
-```
-
-Path inside the description: **first-frame anchor → action onset → continuous development → result or reaction.** Keep identity, clothing, colors, key objects, and spatial relationships consistent with the image.
-
-**FL2VA:**
-
-```text
-How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot N) aligns with the S.SS-second mark of the target video.
-
-integrated_multimodal_description: ...
-overall_soundscape: ...
-non_diegetic_music: ...
-```
-
-`S.SS` is the video duration to **exactly two decimal places**. Prefer a **single shot** so the model can interpolate continuously; use multiple shots only if the user asked for them. Path: **first-frame state → observable intermediate changes → narrowing differences → last-frame state.**
-
-**L2VA:**
-
-```text
-How the reference pictures align with the target video — <Picture 1> (from [Shot N]) aligns with the S.SS-second mark of the target video.
-
-integrated_multimodal_description: ...
-overall_soundscape: ...
-non_diegetic_music: ...
-```
-
-The last-frame image belongs to the **final shot**, not automatically to Shot 1. Path: **plausible preceding state → action/transition → gradual convergence → last-frame landing.**
-
-**Ref2VA** (full reference mode) uses a six-section format, in order: `subject_definitions`, `summary`, `retention_analysis`, `detailed_description`, `overall_soundscape`, `non_diegetic_music`, with consistent reference labels. Details are in `references/ref-en.txt` of the official skill.
-
-A lighter "simple clip" order also appears in official/platform prose (subject → action → setting/light → camera → sound → style). That is fine for short casual prompts, but the **skill's named-field format is the official rewrite target**.
-
-### Camera language (H3)
-
-Official skill: write camera motion as **natural English inside the shot**, not as a stack of tags at the end. Complete expression = **motion type + optional amplitude + optional speed**. Omit amplitude/speed when they are medium/normal.
-
-| Motion type | Meaning |
+| Item | Official fact |
 | --- | --- |
-| Zoom In / Zoom Out | Focal length changes; camera body stays put |
-| Push In / Pull Out | Camera body moves forward / backward |
-| Pan Left / Pan Right | Camera stays, lens pivots horizontally |
-| Truck Left / Truck Right | Camera translates horizontally |
-| Tilt Up / Tilt Down | Camera stays, lens pivots vertically |
-| Pedestal Up / Pedestal Down | Whole camera rises / lowers |
-| Arc Shot | Camera moves in an arc around the subject |
-| Tracking Shot | Camera follows a moving subject |
-| Static Shot | Position and lens stay still |
-| Shake Slightly / Shake Strongly | Camera shake |
-| POV | Subject's point of view |
-| Roll Clockwise / Roll Counterclockwise | Roll around the lens axis |
-| Amplitude | `with small amplitude` / `with large amplitude` |
-| Speed | `at slow speed` / `at fast speed` |
+| Tasks | Text-to-image and image editing, one checkpoint |
+| Reference images | Up to **16**, in order. On the API and on SGLang they are `<Picture 1>`, `<Picture 2>`, … Labels such as `@Picture 1` and `@图1` mean `<Picture 1>` |
+| `negative_prompt` | **Not supported.** The local server rejects the field. There is no separate negative box |
+| Output area | `1K`, `2K`, or **`4K` (best results)**. API default `auto` is a 4K area with the aspect ratio chosen by prompt expansion. Custom size is about 0.65 MP to 20 MP. The prompt-writing skill says the output area defaults to 4K |
+| Prompt length | Up to **32,000 characters**. With prompt expansion disabled, only about the **first 4,096 tokens** take effect. The README also says content beyond 4,096 tokens is truncated |
+| Prompt expansion | On by default for text-to-image (can be turned off). Always on for API image editing. A **local server does not expand**; it uses the prompt as given |
+| Not supported | Mask inpainting, transparent backgrounds, user seeds on the API, preview images |
 
-Official examples:
+fal.ai's H3 Image page restates the same six prompting habits and a 32,000-character prompt, with 1–16 images cited in order. Its playground default size is 2K; that is a host default, not MiniMax's "4K for best results."
 
-```text
-The camera pushes in with small amplitude at slow speed toward the folded letter in her hands.
-The camera pans right with large amplitude at fast speed, revealing the open doorway.
-The camera holds a static shot as the runner exits the frame.
-```
+### What this app asks the rewriter to emit
 
-**Bracket shorthand still appears in official H3 product docs**, in a lighter form than Hailuo 02/2.3: "add camera motion instructions (e.g., [pan], [zoom], [static]) directly after key descriptions." Both are official; the writing skill prefers the full sentence form because it gives the model more to work with.
+The owner runs a local pruned int8 build in ComfyUI. Official ComfyUI ships separate text-to-image and edit templates. The local server takes one `prompt` string and does not expand it, and it rejects `negative_prompt`. So the rewrite is **one plain prompt**, not API JSON, not a size line, and not an aspect-ratio footer. 4K stays a ComfyUI size setting. Writing `4K` or `8k` into the prompt is a quality tag, and the template strips it.
 
-### Length guidance
+**Length this app enforces: 1,500 characters, `suggested`.** That is not the official truncation point. The official point is 32,000 characters / about 4,096 tokens. 1,500 is the practical budget used here because:
 
-- API hard cap: **7,000 characters**.
-- Video length described in the prompt must **match the requested duration (4–15 seconds)**.
-- Shot cut times must fall inside that duration.
-- `overall_soundscape` and `non_diegetic_music` are short summaries (music: official skill says **1–3 English sentences**, or `N/A`).
-- MiniMax also offers **H3-Context-IR**, an official async prompt enhancer that returns a structured prompt in `content.prompt` and does not itself generate video. The app can treat that as an optional upstream enricher, not as a replacement for knowing the format.
+- the official skill asks for **one paragraph** on an edit and **one or more flowing paragraphs** on text-to-image, not a multi-thousand-character Context-IR expansion;
+- the edit example this app ships is **1,455 characters**;
+- a local build uses that string as-is, so a short concrete paragraph is the useful size.
 
-### Special syntax
+Crossing 1,500 warns and still keeps the text. The template tells the rewriter not to drop a required subject, quote, or preservation sentence to get under the number. Official expanded prompts are longer: `examples/revised_prompt.edit.txt` is a Context-IR expansion well past 1,500 characters, and several showcase prompts in `showcase/real-world.md` are longer still. Those are the expander's output, or hand-written showcases. This app writes the prompt the local server will consume.
 
-- Shot labels: `[Shot 1]`, `[Shot 2]`, ...
-- **Do not timestamp Shot 1.** Later shots start with a strictly increasing cut time, official form: `[Shot 2] At 00:03.500, the camera cuts to...`
-- Cuts: `the camera cuts to`, `the shot cuts to`, `the shot transitions to`, etc. Cross-dissolve, fade, or wipe only when the user asks. A cut should introduce new information; for a mere distance/angle change, prefer camera motion.
-- At the start of Shot 1, state style + initial composition. Common styles listed: Cinematic, live-action, 2D-animated, 3D CG, claymation, watercolor, vintage film.
-- Speakers: stable IDs `(S1)`, `(S2)`, or compound `(S1,S2)`. Characters who never vocalize get no speaker ID. First appearance should establish type/age/gender/on-screen status, pitch, timbre, rate, or accent **outside** the dialogue block.
-- Dialogue block: only language tag + verbatim user text inside the dialogue markers. Official examples use: `says: <d>[English] First batch of the morning.</d>` Do not translate or rewrite the spoken words. For voiceover, use the exact phrase `says in an off-screen voiceover`, then state that on-screen lips remain closed. If a line crosses a cut, mark continuity (`continues seamlessly across the cut`, etc.).
-- Picture/reference labels such as `<Picture 1>` must stay consistent.
-- `non_diegetic_music` is only music **the characters cannot hear**. Diegetic singing, radio, TV, or phone music belongs in `integrated_multimodal_description`. No abstract mood words in the music field.
+### Text-to-image shape
 
-### Negative prompt support
+Official skill and `references/t2i-en.txt`:
 
-No separate `negative_prompt` field is documented on the official H3 V2 create API. Control unwanted elements in the structured description (and use `N/A` for music when there should be none). Do not assume a Hailuo-style negative box.
+- Task before style. Layout before details. Style through visible colour, material, light, and texture, not words like "premium".
+- One frozen moment unless a sequence is requested.
+- Grids as rows and columns (`2 rows and 3 columns`), not `2×3`.
+- Quote every word that appears, in its own language. When none was asked for, add "The image contains no text, letters or numbers."
+- No `<Picture>` labels. This mode has no input images.
 
-### Do's and don'ts
+### Edit shape
 
-**Do**
+Official `references/edit-en.txt`. One continuous paragraph, headings not printed, in this order:
 
-- Match the timeline to the requested 4–15s duration.
-- Prefer concrete visual and audio detail over "cinematic" or "beautiful."
-- Write camera moves as in-shot sentences with type + amplitude + speed when useful.
-- Keep speaker IDs, picture labels, and field names exact.
-- Preserve original-language dialogue and visible text.
-- For I2VA/FL2VA/L2VA, state how the keyframe connects to the timeline.
+1. **Source definitions.** `The red cup on the left in <Picture 1> is <Subject 1>.` A subject can be a person, outfit, room, text block, or a transferred property. Do not number every incidental part.
+2. **Target overview.** Start with `The target image` and describe the finished picture, not an editing command.
+3. **One relationship per subject.**
+   - Fully preserved: the standalone sentence `<Subject N> is fully preserved.`
+   - Partially preserved: say it is partially preserved, which categories stay, and which change. Moving, relighting, or a new pose is a change. Do not re-describe appearance that stays.
+   - Attribute transfer or weak reference, when only a property is borrowed.
+4. **Changed details**, without repeating retained appearance.
 
-**Don't**
+The published local example (`examples/revised_prompt.edit.txt`) follows that order for a podcast-set edit: many subjects from one picture, then `is partially preserved` for the two people and `is fully preserved` for the props.
 
-- Output a plot summary instead of a timed audiovisual description.
-- Leave unresolved reference labels.
-- Add a timestamp on Shot 1, or use cut times outside the duration.
-- Stack camera labels only at the end of the prompt (skill guidance).
-- Put audience-only music in the diegetic description, or vice versa.
-- Invent dialogue wording; quote the user verbatim inside the dialogue block.
+`showcase/multi-reference.md` shows the other habit: up to 16 pictures, each with a job (empty room, then nine furniture shots). Preserve colour, material, structure, and proportions of a product reference, and say what may be added.
 
-### Short example of a strong prompt (official-style T2VA)
+### Rules this app adds on top of the official guide
+
+These are owner rules for photographic edits. They are not a second official format. The official partially-preserved sentence is the carrier.
+
+- Define each referenced person, outfit, or room as `<Subject N>` from `<Picture N>`, and give each reference one job.
+- State preservation once. For a person, what stays is identity, face, hair, accessories, build, overall body proportions, silhouette, shoulder width, and scale. Then list what changes (pose, clothing, setting). Add `Do not slim, enlarge, beautify, or reshape her figure.` once, with her, his, or their.
+- Do not restate the size of a body part the user named. Repeated chest-size wording has enlarged anatomy. Translate it into clothing fit: loosely fitted, ordinary cloth wrinkles, not a stretched or tight fit. An overall build word the user already used (slender, petite) may appear once, inside the preservation sentence. Keep the user's pose, outfit, framing, and expression.
+- Strip vague quality tags: hyper-realistic, ultrarealistic, masterpiece, best quality, 8k, flawless, glowing, perfect skin. Replace them with capture language: candid phone photo or 35mm film, soft window light from one side, visible pores and slight skin unevenness, muted colours, mild film grain, gentle background blur. Keep a lens or framing the user named (`85mm f/1.8`, mid close-up).
+- Put the avoid list in the positive prompt, because there is no negative field: `Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos.`
+- Unless text was requested, end with `The image contains no text, letters or numbers.` If text was requested, quote it. The official edit guide instead says to keep source lettering by saying no other lettering is added. This app uses the no-text sentence when the idea did not ask for writing and did not ask to keep lettering. When the idea does ask to keep source lettering, quote it and say no other lettering is added.
+- If the idea explicitly asks for a stylized or illustrated look, skip the photographic finish and the avoid sentence. Official guidance says the same thing in general form: keep the requested medium, and do not turn abstract art into a photograph.
+
+`showcase/real-world.md` is the official photographic vocabulary this finish is aiming at: documentary and film stills named by lens and aperture, natural side light, real skin texture, film grain, and an explicit "not a commercial studio shoot" closer. The app's default is the short form of that, not the full showcase length.
+
+### Short example of a strong edit prompt (app shape)
+
+This is the example stored in `core/templates/minimax-h3-image-edit.md`. It is 1,455 characters.
 
 ```text
-integrated_multimodal_description: [Shot 1] Live-action, cinematic, a medium-wide shot frames a baker opening the shutters of a small street bakery before sunrise. The camera pushes in with small amplitude at slow speed as the middle-aged baker with a calm, slightly raspy voice (S1) places a fresh loaf on the wooden counter and says: <d>[English] First batch of the morning.</d> [Shot 2] At 00:05.000, the camera cuts to a close-up of steam rising from the sliced bread while the baker's final words carry over from the previous shot.
-
-overall_soundscape: Wooden shutters scrape open, followed by the soft thud of a loaf on the counter and a faint hiss of steam. Distant early-morning traffic stays in the background.
-
-non_diegetic_music: A sparse acoustic guitar figure at a slow tempo, fading under the close-up.
+The woman in <Picture 1> is <Subject 1>. One complete outfit from <Picture 2> is <Subject 2>. The bedroom in <Picture 3> is <Subject 3>. The target image is a mid close-up, waist-up, eye-level candid fashion snapshot of <Subject 1> sitting on the edge of the bed in <Subject 3>, wearing <Subject 2>, holding up a peace sign and giving a faint smile. <Subject 1> is partially preserved; her face, facial features, hairstyle, accessories, slim petite build, overall body proportions, silhouette, shoulder width, and scale remain as in <Picture 1>, while her pose, clothing, and setting change. Do not slim, enlarge, beautify, or reshape her figure. <Subject 2> is partially preserved; the garment's cut, fabric, colours, and details stay, worn as a loosely fitted top with a very short skirt, with ordinary cloth wrinkles rather than a stretched, tight fit. <Subject 3> is partially preserved; the room layout, bed, and lighting character remain, while the framing becomes a waist-up mid close-up of <Subject 1> on the bed. Shot on an 85mm lens at f/1.8 with soft window light from one side, a faint natural shadow under the collarbone, visible pores and slight skin unevenness, muted colours, mild film grain, and gentle background blur. The image should look like a candid photograph, not a retouched studio campaign. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.
 ```
-
-### Legacy: Hailuo 02 / Hailuo 2.3 / T2V-01-Director (not H3, but easy to confuse)
-
-These remain on `POST https://api.minimax.io/v1/video_generation`.
-
-- Prompt cap: **2,000 characters**.
-- Duration: typically **6s**, or **10s** only at 768P on Hailuo 02 / 2.3; 1080P is 6s only.
-- `prompt_optimizer` defaults to **true**; set false for precise control.
-- Official camera syntax is the 15 **bracket commands**, placed after the relevant action:
-
-  `[Truck left]`, `[Truck right]`, `[Pan left]`, `[Pan right]`, `[Push in]`, `[Pull out]`, `[Pedestal up]`, `[Pedestal down]`, `[Tilt up]`, `[Tilt down]`, `[Zoom in]`, `[Zoom out]`, `[Shake]`, `[Tracking shot]`, `[Static shot]`
-
-- Combine simultaneous moves in one bracket, max recommended **3**: `[Pan left,Pedestal up]`
-- Sequence moves in order: `"...[Push in], then...[Push out]"`
-- Natural language also works; official docs say explicit commands are more accurate.
-- Official example: `A man picks up a book [Pedestal up], then reads [Static shot].`
-
-The rewriter must **not** treat this bracket language as the primary H3 format. It is the official language for Hailuo 02 / 2.3 / T2V-01-Director, and only a light optional shorthand on H3.
 
 ### Sources
 
-- Official H3 announcement: https://www.minimax.io/blog/minimax-h3
-- Official video generation guide (H3 modes, 7000-char limit, 4–15s, bracket shorthand note, Context-IR): https://platform.minimax.io/docs/guides/video-generation
-- Official V2 create API (model IDs, Hailuo-03 API): https://platform.minimax.io/docs/api-reference/video-generation-v2-create
-- Official H3 prompt-writing skill: https://github.com/MiniMax-AI/MiniMax-H3/blob/main/skills/h3-prompt-writing/SKILL.md
-- Official base prompt guide: https://raw.githubusercontent.com/MiniMax-AI/MiniMax-H3/refs/heads/main/skills/h3-prompt-writing/references/base-en.txt
-- Official Hailuo 02/2.3 T2V API (2000 chars, 15 camera commands): https://platform.minimax.io/docs/api-reference/video-generation-t2v
-- Secondary explainers (useful, not authoritative): https://the-ai-future.com/how-to/hailuo-ai-prompt-guide , https://minimax-h3-ai.com/blog/minimax-h3-prompt-guide/
+- Official repository: https://github.com/MiniMax-AI/MiniMax-H3-Image
+- Official prompt skill: https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/skills/h3-image-prompt-writing/SKILL.md
+- Official edit guide: https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/skills/h3-image-prompt-writing/references/edit-en.txt
+- Official text-to-image guide: https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/skills/h3-image-prompt-writing/references/t2i-en.txt
+- Official revised edit prompt (Context-IR expansion, longer than this app's budget): https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/examples/revised_prompt.edit.txt
+- Showcase, photographic stills: https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/showcase/real-world.md
+- Showcase, up to 16 references: https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/showcase/multi-reference.md
+- Announcement (11 November 2026, 4K, 16 references): https://www.minimax.io/blog/minimax-h3-image
+- Platform image-generation guide (32,000 characters, about 4,096 tokens with expansion off, 1–16 images, 4K area): https://platform.minimax.io/docs/guides/image-generation
+- fal.ai H3 Image product page (community restatement of the six habits; 32,000-character prompt): https://fal.ai/minimax-h3-image
+- fal.ai video prompting guide, **not** for this model: https://fal.ai/learn/devs/minimax-h3-prompting-guide
+- ComfyUI tutorial (separate text-to-image and edit templates): https://docs.comfy.org/tutorials/image/minimax/minimax-h3-image
 
 ---
 
@@ -739,7 +652,7 @@ Use one OpenAI SDK or HTTP helper:
 | OpenRouter | `https://openrouter.ai/api/v1` | OpenRouter key | provider-prefixed slug |
 | Ollama | `http://localhost:11434/v1` | any placeholder | local tag, e.g. `llama3.2` |
 
-The rewriter system prompt should change with the **target generator** (Wan 2.2 vs H3 vs Seedance 1.0/2.0/2.5 vs Seedream 4.x/5.x), not with the LLM backend.
+The rewriter system prompt should change with the **target generator** (Wan 2.2 vs H3-Image vs Seedance 1.0/2.0/2.5 vs Seedream 4.x/5.x), not with the LLM backend.
 
 ---
 
@@ -747,10 +660,10 @@ The rewriter system prompt should change with the **target generator** (Wan 2.2 
 
 When the user later says "go," these research points should drive the product, not a single generic "cinematic prompt":
 
-1. **Target profile is mandatory.** Seedance 2.0 vs 2.5 (timestamps), Wan 2.2 vs later Wan (audio), H3 vs Hailuo 02/2.3 (named fields vs `[Pan left]`), Seedream 3.0 vs 4.x/5.x (verbose vs concise) will otherwise produce the wrong full text.
-2. **Output is the full prompt ready to paste**, including official field names, shot labels, quoted poster text, camera sentences, and optional separate Wan `negative_prompt`.
-3. **Enforce length caps in the rewriter instructions:** Wan 2.2 800 characters (T2V ~60–200 words, I2V ≤100 words); H3 match 4–15s and stay under 7,000 characters; Seedance prefer ≤500 Chinese characters or ≤1,000 English words; Seedream prefer ≤300 Chinese characters or ≤600 English words.
-4. **Mode matters:** T2V vs I2V vs first-last vs reference changes the formula for Wan, H3, and Seedance.
+1. **Target profile is mandatory.** Seedance 2.0 vs 2.5 (timestamps), Wan 2.2 vs later Wan (audio), H3-Image edit vs text-to-image (`<Picture N>` / `<Subject N>` vs flowing paragraphs), Seedream 3.0 vs 4.x/5.x (verbose vs concise) will otherwise produce the wrong full text.
+2. **Output is the full prompt ready to paste**, including official field names, shot labels, quoted poster text, camera sentences, and optional separate Wan `negative_prompt`. H3-Image is the exception on shape: one plain prompt string, no API JSON and no negative field.
+3. **Enforce length caps in the rewriter instructions:** Wan 2.2 800 characters (T2V ~60–200 words, I2V ≤100 words); H3-Image prefer ≤1,500 characters (official truncation is 32,000 characters / about 4,096 tokens, which this app does not use as the counter); Seedance prefer ≤500 Chinese characters or ≤1,000 English words; Seedream prefer ≤300 Chinese characters or ≤600 English words.
+4. **Mode matters:** T2V vs I2V changes the formula for Wan. H3-Image text-to-image vs edit changes whether `<Picture N>` labels are allowed. Seedance 1.0 / 2.0 / 2.5 each have their own shot syntax.
 5. **OpenRouter and local Ollama can share one chat-completions client.**
 
 ---
@@ -771,13 +684,19 @@ When the user later says "go," these research points should drive the product, n
 - https://discuss.huggingface.co/t/how-to-get-the-most-out-of-prompts-for-wan-models/170354/2
 - https://huggingface.co/blog/MonsterMMORPG/how-to-prompt-wan-models-full-tutorial-and-guide
 
-### MiniMax H3 and legacy Hailuo
-- https://www.minimax.io/blog/minimax-h3
-- https://platform.minimax.io/docs/guides/video-generation
-- https://platform.minimax.io/docs/api-reference/video-generation-v2-create
-- https://github.com/MiniMax-AI/MiniMax-H3/blob/main/skills/h3-prompt-writing/SKILL.md
-- https://raw.githubusercontent.com/MiniMax-AI/MiniMax-H3/refs/heads/main/skills/h3-prompt-writing/references/base-en.txt
-- https://platform.minimax.io/docs/api-reference/video-generation-t2v
+### MiniMax H3-Image
+- https://github.com/MiniMax-AI/MiniMax-H3-Image
+- https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/skills/h3-image-prompt-writing/SKILL.md
+- https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/skills/h3-image-prompt-writing/references/edit-en.txt
+- https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/skills/h3-image-prompt-writing/references/t2i-en.txt
+- https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/examples/revised_prompt.edit.txt
+- https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/showcase/real-world.md
+- https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/showcase/multi-reference.md
+- https://www.minimax.io/blog/minimax-h3-image
+- https://platform.minimax.io/docs/guides/image-generation
+- https://fal.ai/minimax-h3-image
+- https://fal.ai/learn/devs/minimax-h3-prompting-guide (video H3, not the image model; cited so it is not reused as image guidance)
+- https://docs.comfy.org/tutorials/image/minimax/minimax-h3-image
 
 ### Seedance
 - https://ai.byteplus.com/ark/region:ap-southeast-1/docs/seedance-1-0-pro-pro-fast
