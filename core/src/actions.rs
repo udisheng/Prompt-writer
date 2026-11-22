@@ -97,9 +97,9 @@ pub fn action_addon(requirements: &ActionRequirements) -> String {
         return String::new();
     }
     let place = if requirements.edit {
-        "the sentence that starts with \"The target image\", before any preservation sentence"
+        "the sentence that starts with \"The target image\", after the short picture definitions and before any preservation sentence. Do not open the prompt with the action"
     } else {
-        "the opening sentence that states the action"
+        "the opening sentence that states the action. When the idea includes a person, that sentence also states body position, where the hands are, and where the gaze goes. When the idea shows only a hand, an object, or a still life, describe that and do not invent a person or a facial expression"
     };
     let mut out = format!(
         "\n\n## Actions to keep\n\
@@ -133,9 +133,52 @@ pub fn action_warning(missing: &[String]) -> String {
     )
 }
 
-/// One follow-up when protected terms, action words, or both were dropped.
-pub fn combined_retry(missing_terms: &[String], missing_actions: &[String]) -> Option<String> {
-    if missing_terms.is_empty() && missing_actions.is_empty() {
+/// Picture and subject labels an Edit prompt still has to fix.
+pub fn missing_edit_labels(idea: &str, output: &str) -> Vec<String> {
+    let wanted = picture_numbers(idea);
+    let head = output
+        .split_once("The target image is")
+        .map(|(before, _)| before)
+        .unwrap_or("");
+    let mut problems = Vec::new();
+    for n in &wanted {
+        let picture = format!("<Picture {n}>");
+        if !output.contains(&picture) {
+            problems.push(format!(
+                "{picture} is named in the idea and is missing from the prompt."
+            ));
+        }
+        if !has_subject_definition(head, *n) {
+            problems.push(format!(
+                "<Picture {n}> needs a definition `… is <Subject {n}>.` before `The target image is`."
+            ));
+        }
+    }
+    for n in subject_numbers(output) {
+        if wanted.contains(&n) {
+            continue;
+        }
+        if !has_subject_definition(head, n) {
+            problems.push(format!("<Subject {n}> is used but not defined."));
+        }
+    }
+    problems
+}
+
+pub fn label_warning(missing: &[String]) -> String {
+    format!(
+        "Reference labels missing from the rewrite: {}",
+        missing.join(" ")
+    )
+}
+
+/// One follow-up when protected terms, action words, or edit labels were dropped.
+pub fn combined_retry(
+    missing_terms: &[String],
+    missing_actions: &[String],
+    missing_labels: &[String],
+) -> Option<String> {
+    if missing_terms.is_empty() && missing_actions.is_empty() && missing_labels.is_empty() {
         return None;
     }
     let mut out = String::from(
@@ -158,6 +201,16 @@ pub fn combined_retry(missing_terms: &[String], missing_actions: &[String]) -> O
         for term in missing_actions {
             out.push_str("- ");
             out.push_str(term);
+            out.push('\n');
+        }
+    }
+    if !missing_labels.is_empty() {
+        out.push_str(
+            "\nReference labels. Every picture named in the idea must appear as `<Picture N>` and have a definition `… is <Subject N>.` before `The target image is`. After that, use `<Subject N>`. Do not invent a picture the idea did not name.\n",
+        );
+        for problem in missing_labels {
+            out.push_str("- ");
+            out.push_str(problem);
             out.push('\n');
         }
     }
@@ -226,6 +279,48 @@ fn is_action_object(word: &str) -> bool {
 
 fn clause_offset(idea: &str, clause: &str) -> usize {
     idea.find(clause).unwrap_or(0)
+}
+
+fn picture_numbers(idea: &str) -> Vec<u32> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| {
+        Regex::new(
+            r"(?i)<\s*picture\s+(\d+)\s*>|@\s*picture\s+(\d+)|@图\s*(\d+)|\b(?:picture|image)\s+(\d+)",
+        )
+        .expect("picture pattern")
+    });
+    numbered(re, idea)
+}
+
+fn subject_numbers(output: &str) -> Vec<u32> {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    let re = RE.get_or_init(|| Regex::new(r"<Subject\s+(\d+)>").expect("subject pattern"));
+    numbered(re, output)
+}
+
+fn numbered(re: &Regex, text: &str) -> Vec<u32> {
+    let mut nums = Vec::new();
+    for cap in re.captures_iter(text) {
+        let Some(n) = cap
+            .iter()
+            .skip(1)
+            .flatten()
+            .find_map(|group| group.as_str().parse::<u32>().ok())
+        else {
+            continue;
+        };
+        if !nums.contains(&n) {
+            nums.push(n);
+        }
+    }
+    nums
+}
+
+fn has_subject_definition(head: &str, n: u32) -> bool {
+    let pattern = format!(r"(?i)is\s+<Subject\s+{n}>");
+    Regex::new(&pattern)
+        .expect("definition pattern")
+        .is_match(head)
 }
 
 fn word_regex() -> &'static Regex {
@@ -479,9 +574,36 @@ mod tests {
 
     #[test]
     fn retry_note_names_actions_and_protected_terms() {
-        let note = combined_retry(&["Mika".into()], &["walking".into()]).unwrap();
+        let note = combined_retry(&["Mika".into()], &["walking".into()], &[]).unwrap();
         assert!(note.contains("Mika"));
         assert!(note.contains("walking"));
-        assert!(combined_retry(&[], &[]).is_none());
+        assert!(combined_retry(&[], &[], &[]).is_none());
+    }
+
+    #[test]
+    fn edit_labels_require_each_picture_and_its_definition() {
+        let idea = "The woman in <Picture 1>, the coat from Image 2, and the street in @Picture 3.";
+        let good = "The woman in <Picture 1> is <Subject 1>. The coat in <Picture 2> is <Subject 2>. The street in <Picture 3> is <Subject 3>. The target image is <Subject 1> walking toward the camera, wearing <Subject 2>, on <Subject 3>.";
+        assert!(
+            missing_edit_labels(idea, good).is_empty(),
+            "{:?}",
+            missing_edit_labels(idea, good)
+        );
+
+        let skipped =
+            "The woman in <Picture 1> is <Subject 1>. The target image is <Subject 1> walking.";
+        let missing = missing_edit_labels(idea, skipped);
+        assert!(missing.iter().any(|item| item.contains("<Picture 2>")));
+        assert!(missing.iter().any(|item| item.contains("<Picture 3>")));
+        assert!(missing.iter().any(|item| item.contains("is <Subject 2>")));
+
+        let late =
+            "The target image is <Subject 1> walking. The woman in <Picture 1> is <Subject 1>.";
+        let missing = missing_edit_labels("<Picture 1>", late);
+        assert!(missing.iter().any(|item| item.contains("before")));
+
+        let extra = "The woman in <Picture 1> is <Subject 1>. The target image is <Subject 1> beside <Subject 4>.";
+        let missing = missing_edit_labels("<Picture 1>", extra);
+        assert!(missing.iter().any(|item| item.contains("<Subject 4>")));
     }
 }

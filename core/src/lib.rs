@@ -11,7 +11,7 @@ mod template;
 
 pub use actions::{
     ActionRequirements, action_addon, action_requirements, action_warning, combined_retry,
-    missing_action_terms,
+    label_warning, missing_action_terms, missing_edit_labels,
 };
 pub use error::RewriteError;
 pub use history::{HISTORY_LIMIT, HistoryEntry, delete_history, push_history};

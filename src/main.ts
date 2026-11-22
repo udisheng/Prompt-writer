@@ -32,8 +32,8 @@ const FAMILIES = [
 const HINTS: Record<string, string> = {
   "wan22-t2v": "Subject, motion, then camera and light. About 80–120 words, and the positive prompt must stay within 800 characters.",
   "wan22-i2v": "Count, motion, one camera, and what must not happen. “fixed camera” holds a still shot. 100 words.",
-  "minimax-h3-image-t2i": "Open with the action. Natural light and skin. Film grain only when you ask for it.",
-  "minimax-h3-image-edit": "Lead with the pose, hands, gaze, and expression. A short preservation line comes after that.",
+  "minimax-h3-image-t2i": "Open with the action, including body, hands, and gaze for a person. Do not invent a lens.",
+  "minimax-h3-image-edit": "Define each picture first, then the pose. Do not invent a lens.",
   "seedance-1.0": "Subject plus action. Scene changes use “camera/scene switch”. Duration is a trailing --duration flag.",
   "seedance-2.0": "Shot 1, Shot 2, one camera move each. Bind references as @Image 1. Do not use timestamps.",
   "seedance-2.5": "Asset map, summary, timestamped shots, and constants. Clips can run up to 30 seconds.",

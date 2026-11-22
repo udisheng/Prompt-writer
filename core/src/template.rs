@@ -427,6 +427,16 @@ mod tests {
                     assert!(body.contains("true-to-life colours"));
                     assert!(body.contains("do not add film grain"));
                     assert!(body.contains("do not re-caption"));
+                    assert!(body.contains("do not open the prompt with the action"));
+                    assert!(body.contains("never write slender, petite, slim, skinny, or curvy"));
+                    assert!(
+                        body.contains(
+                            "if the idea does not name a lens or aperture, do not add one"
+                        )
+                    );
+                    assert!(body.contains("only a format sample"));
+                    assert!(body.contains("every picture the idea names"));
+                    assert!(!body.contains("including `85mm`"));
                     assert!(!body.contains("integrated_multimodal_description"));
                     assert_eq!(template.max_chars, Some(1500));
                     assert_eq!(template.max_chars_kind, LimitKind::Suggested);
@@ -446,6 +456,20 @@ mod tests {
                     assert!(body.contains("every action verb"));
                     assert!(body.contains("true-to-life colours"));
                     assert!(body.contains("do not add film grain"));
+                    assert!(body.contains("do not invent a full person"));
+                    assert!(
+                        body.contains(
+                            "body position, where the hands are, and where the gaze goes"
+                        )
+                    );
+                    assert!(body.contains("never write slender, petite, slim, skinny, or curvy"));
+                    assert!(
+                        body.contains(
+                            "if the idea does not name a lens or aperture, do not add one"
+                        )
+                    );
+                    assert!(body.contains("only a format sample"));
+                    assert!(!body.contains("including `85mm`"));
                     assert_eq!(template.max_chars, Some(1500));
                     assert_eq!(template.max_chars_kind, LimitKind::Suggested);
                     assert_eq!(template.output, OutputKind::Text);
@@ -628,7 +652,9 @@ mod tests {
 
     #[test]
     fn h3_image_fixture_outputs_keep_actions_and_skip_default_film() {
-        use crate::actions::{action_addon, action_requirements, missing_action_terms};
+        use crate::actions::{
+            action_addon, action_requirements, missing_action_terms, missing_edit_labels,
+        };
 
         let edit_template = parse_template(
             "minimax-h3-image-edit.md",
@@ -710,6 +736,10 @@ mod tests {
                 "vintage",
             ] {
                 assert!(!lower.contains(banned), "{name} contains {banned}");
+            }
+            if edit {
+                let labels = missing_edit_labels(idea, expected);
+                assert!(labels.is_empty(), "{name} labels: {labels:?}");
             }
         }
 

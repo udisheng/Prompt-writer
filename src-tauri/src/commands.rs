@@ -6,11 +6,11 @@ use rewriter_core::{
     Backend, ChatParams, HistoryEntry, LimitKind, MeasuredPrompt, ModelInfo, OPENROUTER_BASE,
     OutputKind, ProviderKind, Settings, Template, action_addon, action_requirements,
     action_warning, build_chat_request, build_user_message, bundled_by_id, chat_complete,
-    combined_retry, format_keyword_text, list_ollama_models, list_openrouter_models, measure,
-    migrate_template_id, missing_action_terms, missing_terms, missing_warning, ollama_tags_url,
-    parse_keyword_document, parse_output, protection_for, push_history, render_system,
-    run_keyword_line, should_retry_protection, strip_inline_braces, system_addon,
-    validate_duration, validate_idea,
+    combined_retry, format_keyword_text, label_warning, list_ollama_models, list_openrouter_models,
+    measure, migrate_template_id, missing_action_terms, missing_edit_labels, missing_terms,
+    missing_warning, ollama_tags_url, parse_keyword_document, parse_output, protection_for,
+    push_history, render_system, run_keyword_line, should_retry_protection, strip_inline_braces,
+    system_addon, validate_duration, validate_idea,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -431,14 +431,26 @@ pub async fn rewrite(
     let mut measured = protected_measure(&template, &raw, &protection.inline);
     let mut missing = missing_terms(&measured.output, &protection.required);
     let mut missing_actions = missing_action_terms(&measured.output, &actions);
-    if should_retry_protection(0, &missing) || should_retry_protection(0, &missing_actions) {
-        let note = combined_retry(&missing, &missing_actions).unwrap_or_default();
+    let mut missing_labels = if template.family == "minimax-h3-image" && template.variant == "edit"
+    {
+        missing_edit_labels(&idea, &measured.output)
+    } else {
+        Vec::new()
+    };
+    if should_retry_protection(0, &missing)
+        || should_retry_protection(0, &missing_actions)
+        || should_retry_protection(0, &missing_labels)
+    {
+        let note = combined_retry(&missing, &missing_actions, &missing_labels).unwrap_or_default();
         let follow = request.with_follow_up(&raw, &note);
         match chat_complete(&state.http, &follow).await {
             Ok(retry_raw) => {
                 measured = protected_measure(&template, &retry_raw, &protection.inline);
                 missing = missing_terms(&measured.output, &protection.required);
                 missing_actions = missing_action_terms(&measured.output, &actions);
+                if template.family == "minimax-h3-image" && template.variant == "edit" {
+                    missing_labels = missing_edit_labels(&idea, &measured.output);
+                }
             }
             Err(err) => {
                 measured.warnings.push(format!(
@@ -452,6 +464,9 @@ pub async fn rewrite(
     }
     if !missing_actions.is_empty() {
         measured.warnings.push(action_warning(&missing_actions));
+    }
+    if !missing_labels.is_empty() {
+        measured.warnings.push(label_warning(&missing_labels));
     }
     let backend_name = match settings.backend {
         Backend::Openrouter => "openrouter",
