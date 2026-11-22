@@ -14,7 +14,10 @@ const FAMILIES = [
     { id: "wan22-t2v", label: "Text to video" },
     { id: "wan22-i2v", label: "Image to video" },
   ]},
-  { id: "minimax-h3", label: "MiniMax H3", options: [{ id: "minimax-h3", label: "Text to video" }] },
+  { id: "minimax-h3-image", label: "MiniMax H3-Image", options: [
+    { id: "minimax-h3-image-t2i", label: "Text to image" },
+    { id: "minimax-h3-image-edit", label: "Edit" },
+  ]},
   { id: "seedance", label: "Seedance", options: [
     { id: "seedance-1.0", label: "1.0" },
     { id: "seedance-2.0", label: "2.0" },
@@ -29,7 +32,8 @@ const FAMILIES = [
 const HINTS: Record<string, string> = {
   "wan22-t2v": "Subject, motion, then camera and light. About 80–120 words, and the positive prompt must stay within 800 characters.",
   "wan22-i2v": "Count, motion, one camera, and what must not happen. “fixed camera” holds a still shot. 100 words.",
-  "minimax-h3": "Labelled shots, a soundscape, and a score. Duration is part of the prompt, from 4 to 15 seconds.",
+  "minimax-h3-image-t2i": "Open with the action, including body, hands, and gaze for a person. Do not invent a lens.",
+  "minimax-h3-image-edit": "Define each picture first, then the pose. Do not invent a lens.",
   "seedance-1.0": "Subject plus action. Scene changes use “camera/scene switch”. Duration is a trailing --duration flag.",
   "seedance-2.0": "Shot 1, Shot 2, one camera move each. Bind references as @Image 1. Do not use timestamps.",
   "seedance-2.5": "Asset map, summary, timestamped shots, and constants. Clips can run up to 30 seconds.",
@@ -130,8 +134,11 @@ function templateOf(id: string): TemplateSummary | undefined {
   return state.templates.find((template) => template.id === id);
 }
 
+function migrateTemplateId(id: string): string {
+  return id === "minimax-h3" ? "minimax-h3-image-t2i" : id;
+}
+
 function durationBounds(id: string): { min: number; max: number } | null {
-  if (id === "minimax-h3") return { min: 4, max: 15 };
   if (id === "seedance-2.5") return { min: 4, max: 30 };
   if (id.startsWith("seedance-")) return { min: 4, max: 15 };
   return null;
@@ -187,7 +194,7 @@ function fillFamilies() {
 
 function renderVariants() {
   const family = FAMILIES.find((item) => item.id === ui.family.value) ?? FAMILIES[0];
-  ui.variantLabel.textContent = family.id === "seedance" ? "Version" : family.id === "seedream" ? "Task" : "Mode";
+  ui.variantLabel.textContent = family.id === "seedance" ? "Version" : family.id === "seedream" || family.id === "minimax-h3-image" ? "Task" : "Mode";
   ui.variants.replaceChildren();
   ui.variantWrap.hidden = family.options.length < 2;
   if (!family.options.some((option) => option.id === state.templateId)) {
@@ -225,7 +232,7 @@ function renderVariants() {
 }
 
 function applyTemplateId(id: string) {
-  state.templateId = id;
+  state.templateId = migrateTemplateId(id);
   ui.family.value = familyOf(id);
   renderVariants();
 }
@@ -278,7 +285,10 @@ function renderOutput() {
   const template = templateOf(state.templateId);
   const result = state.result;
   const output = ui.output.value;
-  const missing = result?.missingProtected ?? [];
+  const missing = [
+    ...(result?.missingProtected ?? []),
+    ...(result?.missingActions ?? []),
+  ];
   ui.protectedActions.hidden = missing.length === 0;
   if (state.commandOutput) {
     ui.outputLabel.textContent = "Keyword command";
@@ -371,6 +381,7 @@ function renderHistory(entries: HistoryEntry[]) {
         warnings: entry.warnings,
         historyId: entry.id,
         missingProtected: [],
+        missingActions: [],
       };
       state.commandOutput = false;
       renderOutput();
@@ -507,7 +518,10 @@ async function runKeywordCommand(line: string) {
 }
 
 function appendMissingTerms() {
-  const missing = state.result?.missingProtected ?? [];
+  const missing = [
+    ...(state.result?.missingProtected ?? []),
+    ...(state.result?.missingActions ?? []),
+  ];
   if (!missing.length) return;
   const current = ui.output.value.replace(/\s+$/, "");
   const addition = missing.join(", ");
@@ -520,7 +534,10 @@ function appendMissingTerms() {
       charCount: [...output].length,
       wordCount: output.trim().split(/\s+/).filter(Boolean).length,
       missingProtected: [],
-      warnings: state.result.warnings.filter((warning) => !warning.startsWith("Protected terms missing")),
+      missingActions: [],
+      warnings: state.result.warnings.filter(
+        (warning) => !warning.startsWith("Protected terms missing") && !warning.startsWith("Action words missing"),
+      ),
     };
   }
   renderOutput();

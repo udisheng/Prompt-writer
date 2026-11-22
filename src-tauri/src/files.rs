@@ -1,5 +1,6 @@
 use rewriter_core::{
-    HistoryEntry, Settings, Template, TemplateSummary, bundled_templates, parse_template,
+    HistoryEntry, RETIRED_MINIMAX_H3_TEMPLATE, Settings, Template, TemplateSummary,
+    bundled_templates, parse_template,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -27,6 +28,11 @@ struct HistoryFile {
 pub fn seed_templates(dir: &Path) -> Result<(), String> {
     fs::create_dir_all(dir)
         .map_err(|err| format!("Could not create the templates folder: {err}"))?;
+    let retired = dir.join(format!("{RETIRED_MINIMAX_H3_TEMPLATE}.md"));
+    if retired.exists() {
+        fs::remove_file(&retired)
+            .map_err(|err| format!("Could not remove the retired MiniMax H3 template: {err}"))?;
+    }
     for (name, contents) in bundled_templates() {
         let path = dir.join(name);
         if !path.exists() {
@@ -42,7 +48,14 @@ pub fn load_settings(path: &Path) -> Settings {
         return Settings::default();
     };
     match serde_json::from_str::<Settings>(&text) {
-        Ok(settings) => settings.normalized(),
+        Ok(settings) => {
+            let retired = settings.default_template_id.trim() == RETIRED_MINIMAX_H3_TEMPLATE;
+            let settings = settings.normalized();
+            if retired {
+                let _ = save_settings(path, &settings);
+            }
+            settings
+        }
         Err(_) => {
             let _ = fs::rename(path, backup_path(path));
             Settings::default()

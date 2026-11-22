@@ -1,3 +1,4 @@
+mod actions;
 mod error;
 mod history;
 mod http;
@@ -8,6 +9,10 @@ mod secret_file;
 mod settings;
 mod template;
 
+pub use actions::{
+    ActionRequirements, action_addon, action_requirements, action_warning, combined_retry,
+    label_warning, missing_action_terms, missing_edit_labels,
+};
 pub use error::RewriteError;
 pub use history::{HISTORY_LIMIT, HistoryEntry, delete_history, push_history};
 pub use http::{
@@ -23,7 +28,10 @@ pub use protect::{
 };
 pub use redact::redact_secrets;
 pub use secret_file::{delete_secret_file, read_secret_file, write_secret_file};
-pub use settings::{Backend, DEFAULT_HOTKEY, DEFAULT_OLLAMA_URL, DEFAULT_TEMPLATE, Settings};
+pub use settings::{
+    Backend, DEFAULT_HOTKEY, DEFAULT_OLLAMA_URL, DEFAULT_TEMPLATE, MINIMAX_H3_IMAGE_T2I,
+    RETIRED_MINIMAX_H3_TEMPLATE, Settings, migrate_template_id,
+};
 pub use template::{
     LimitKind, OutputKind, Template, TemplateSummary, build_user_message, bundled_by_id,
     bundled_templates, duration_clock, parse_template, render_system, template_filename,

@@ -2,20 +2,20 @@
 
 Prompt Rewriter is a small always-on-top desktop overlay. You type a rough idea, pick a video or image model, and an LLM rewrites the idea into that model's prompt format.
 
-Video and image models do not share a prompt shape. Wan 2.2 wants a short cinematic paragraph plus a negative prompt. MiniMax H3 wants labelled shots, a soundscape, and a score inside a 4–15 second timeline. Seedance 1.0, 2.0, and 2.5 each use a different shot syntax. Seedream wants a short natural-language image prompt, with edits named as a change plus what must stay. Pasting one loose sentence into all of them drops the details those models actually follow. The overlay stays above the generator you are using, so the rewrite is a copy away.
+Video and image models do not share a prompt shape. Wan 2.2 wants a short cinematic paragraph plus a negative prompt. MiniMax H3-Image wants one plain still-image prompt: an edit names each reference as `<Subject N>` from `<Picture N>`, and text-to-image is flowing paragraphs. Seedance 1.0, 2.0, and 2.5 each use a different shot syntax. Seedream wants a short natural-language image prompt, with edits named as a change plus what must stay. Pasting one loose sentence into all of them drops the details those models actually follow. The overlay stays above the generator you are using, so the rewrite is a copy away.
 
 The app does not call Wan, MiniMax, Seedance, or Seedream. The rewrite itself is a chat completion sent to [OpenRouter](https://openrouter.ai/) or a local [Ollama](https://ollama.com/) server. HTTP runs in Rust. The window is a Tauri 2 shell. The published installer is the Windows one.
 
-The prompt rules come from the research in [`docs/prompt-research.md`](docs/prompt-research.md) (17 November 2026). Each target is a markdown template under `core/templates/`.
+The prompt rules come from the research in [`docs/prompt-research.md`](docs/prompt-research.md) (17 November 2026; the MiniMax section was replaced on 22 November 2026 for H3-Image). Each target is a markdown template under `core/templates/`.
 
 ## Features
 
 - **Global hotkey overlay.** Default chord is **Ctrl+Shift+Space**. It shows or hides a borderless window that is always on top and skipped on the taskbar (460×760, minimum 380×560). **Esc** or **Hide** hides it. **Ctrl+Enter** rewrites.
 - **System tray.** Left-click toggles the window. The menu is Show / Hide, Settings, and Quit. Quit is the way to exit. A second launch focuses the window that is already running.
 - **Two rewrite backends.** OpenRouter, or Ollama on your machine. Both go through one OpenAI-compatible chat client. The request sets `"stream": false`.
-- **Eight targets.**
+- **Nine targets.**
   - Wan 2.2 text-to-video and image-to-video
-  - MiniMax H3 (4–15 seconds)
+  - MiniMax H3-Image text-to-image and edit
   - Seedance 1.0, 2.0 (4–15 seconds), and 2.5 (4–30 seconds)
   - Seedream generate and edit
 - **Wan returns two fields.** A positive prompt and a separate negative prompt, with their own limits.
@@ -27,7 +27,7 @@ The prompt rules come from the research in [`docs/prompt-research.md`](docs/prom
 
 ## Prompt formats
 
-Compose groups the eight templates into four families. The hint under the picker is a one-line reminder. The full rules are the template body, which is sent as the system message. `{{duration}}` and `{{duration_clock}}` are filled in before that send for MiniMax H3 and Seedance. The clock form is `00:06.000` for 6 seconds, and it is replaced first so `{{duration}}` does not eat it.
+Compose groups the nine templates into four families. The hint under the picker is a one-line reminder. The full rules are the template body, which is sent as the system message. `{{duration}}` is filled in before that send for Seedance. `{{duration_clock}}` is still replaced first, as `00:06.000` for 6 seconds, so a template that contains both does not let `{{duration}}` eat the clock. No bundled template uses the clock.
 
 The samples below are the shape examples inside the template files (and the research those lines were taken from). They show the format. They are not a claim about what a particular OpenRouter model will return for a new idea.
 
@@ -37,7 +37,8 @@ Limits in the table are the frontmatter the running app enforces. "API truncatio
 | --- | --- | --- | --- |
 | `wan22-t2v` | positive + negative | 800 characters positive, 500 characters negative | API truncation. The template aims for about 80–120 words (official outer band 60–200; a simple shot can be shorter). That band is not a separate counter. |
 | `wan22-i2v` | positive + negative | 100 words and 800 characters positive, 500 characters negative | 100 words from the official I2V rewriter; 800 / 500 are API truncation. |
-| `minimax-h3` | one prompt | 7,000 characters. Duration 4–15 seconds. | API character cap. |
+| `minimax-h3-image-t2i` | one prompt | 1,500 characters, suggested | Practical budget for a prompt a local server uses as given. The official API allows 32,000 characters and, with expansion off, about the first 4,096 tokens. |
+| `minimax-h3-image-edit` | one prompt | 1,500 characters, suggested | Same budget. The golden edit example in the template is 1,205 characters. |
 | `seedance-1.0` | one prompt | 1,000 words. Duration 4–15 seconds. | Quality budget: 1,000 English words or 500 Chinese characters. Only the word cap is in frontmatter. |
 | `seedance-2.0` | one prompt | 1,000 words. Duration 4–15 seconds. | Same Seedance quality budget. |
 | `seedance-2.5` | one prompt | 1,000 words. Duration 4–30 seconds. | Same word budget. 30 seconds is the 2.5 duration ceiling. |
@@ -96,34 +97,36 @@ Exactly two people stay in frame, and nobody else enters. The woman slowly turns
 
 When the positive prompt says `fixed camera`, the negative list excludes shaky cam, handheld, and extra camera moves. The same JSON pair is required. This app does not upload the still. The template tells the rewriter that the picture already exists.
 
-### MiniMax H3
+### MiniMax H3-Image · Text to image
 
-File: `core/templates/minimax-h3.md`. Variant `t2va`.
+File: `core/templates/minimax-h3-image-t2i.md`. Variant `t2i`.
 
-The clip length is the duration you set (default in the overlay is 6 seconds, allowed range 4–15). The prompt must stay under 7,000 characters. Three fields, labels exact, separated by a blank line:
+One or more short flowing paragraphs, not a tag list and not API JSON. There are no reference images in this mode, so the prompt does not invent `<Picture N>` labels. Task comes before style, and layout before details. A grid is written as rows and columns (`2 rows and 3 columns`).
+
+The official API accepts 32,000 characters and, with prompt expansion off, uses about the first 4,096 tokens ([image generation guide](https://platform.minimax.io/docs/guides/image-generation); [model README](https://github.com/MiniMax-AI/MiniMax-H3-Image)). H3-Image has no `negative_prompt` field. The official default output area for best results is 4K, which is a size you set in ComfyUI, not a word in the prompt. This app aims at 1,500 characters because a local server uses the prompt as written and the edit example below is 1,205. Crossing 1,500 warns and still keeps the text.
+
+The first sentence is the action. For a person it states body position, hands, and gaze. A hand, object, or still life stays that: no invented person, garment, or expression. Every action verb from the idea stays in the form the user wrote. Film grain, 35mm film, and muted colours are not the default. The finish is soft window light or natural daylight, true-to-life colours, natural skin texture with visible pores, and realistic depth of field. Film, grain, or vintage words are added only when the idea asks for them. A lens, aperture, or framing the idea already named is copied. If the idea names none, none is added. Never write slender, petite, slim, skinny, or curvy. Vague quality tags (`hyper-realistic`, `masterpiece`, `best quality`, `8k`, `flawless`, `perfect skin`) are removed. The avoid list is written in the prompt: `Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos.` If no writing was requested, the prompt ends with `The image contains no text, letters or numbers.` A size named for a body part is not repeated; it becomes clothing fit (loosely fitted, ordinary cloth wrinkles, not stretched or tight).
+
+Shape example from the template:
 
 ```text
-integrated_multimodal_description: [Shot 1] ...
-
-overall_soundscape: ...
-
-non_diegetic_music: ...
+A woman sitting at a wooden table beside a window, looking down at a cup held in both hands, gaze on the cup, shoulders relaxed, and a faint smile. Her knit cardigan is loosely fitted, with ordinary cloth wrinkles rather than a stretched, tight fit. Do not slim, enlarge, beautify, or reshape her figure. Soft window light, true-to-life colours, natural skin texture with visible pores, and realistic depth of field. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.
 ```
 
-`[Shot 1]` opens with style and composition and has no timestamp. Later shots use `[Shot N]` and a cut time inside the duration, for example `[Shot 2] At 00:03.500, the camera cuts to ...`. Camera moves are natural English sentences (`The camera pushes in with small amplitude at slow speed toward the folded letter.`), not Hailuo 02 / 2.3 / T2V-01-Director bracket commands such as `[Pan left]`. Spoken words stay verbatim inside `<d>[Language] ...</d>`, with a stable speaker id such as `(S1)`. On-screen text stays in double quotes and is not translated.
+### MiniMax H3-Image · Edit
 
-`overall_soundscape` is ambience and physical sound, one to four sentences. `non_diegetic_music` is score the characters cannot hear, or `N/A`. There is no negative-prompt field.
+File: `core/templates/minimax-h3-image-edit.md`. Variant `edit`.
 
-If the idea describes an existing first frame, last frame, or both, the template adds a picture-alignment line (`<Picture 1>`, `Picture 2`) before the three fields. The app still does not upload those pictures.
+One paragraph. Picture definitions come first. Do not open with the action. The sentence that starts with `The target image is` comes after those definitions and before preservation, and it contains every action verb from the idea, stated as body position, hand gesture, gaze, and expression ([edit guide](https://github.com/MiniMax-AI/MiniMax-H3-Image/blob/main/skills/h3-image-prompt-writing/references/edit-en.txt): do not re-caption retained appearance). References are `<Picture 1>`, `<Picture 2>`, up to 16, in attachment order. `Image 1`, `@Picture 1`, and `@图1` are the same label. Each picture gets one job and a definition `… is <Subject N>.` A person, outfit, or room is defined once, with no appearance caption: `The woman in <Picture 1> is <Subject 1>.`
 
-Shape example from the template, written for a duration whose cut time fits:
+Preservation is one short sentence after the action, in the official partially-preserved form: what stays, then what changes. For a person that is identity, face, hair, accessories, build, proportions, silhouette, shoulder width, and scale. It does not replace the action and does not describe the face. The next sentence is `Do not slim, enlarge, beautify, or reshape her figure.` (or his, or their). A body-part size from the idea is not repeated. On an H3-Image rewrite the app lists the idea's action words under "Actions to keep" and, for an edit, checks that every named picture appears as `<Picture N>` with a definition `… is <Subject N>.` before the target sentence. Either miss gets one retry, then a warning, the same way protected keywords are checked. The same realism finish, avoid line, and no-text line as text-to-image apply, and they are skipped when the idea asks for a stylized or illustrated look. The app does not upload the pictures.
+
+A saved default of `minimax-h3`, the removed video target, loads as `minimax-h3-image-t2i`. On launch, a leftover `templates/minimax-h3.md` is deleted.
+
+Shape example from the template:
 
 ```text
-integrated_multimodal_description: [Shot 1] Live-action, cinematic, a medium-wide shot frames a baker opening the shutters of a small street bakery before sunrise. The camera pushes in with small amplitude at slow speed as the middle-aged baker with a calm, slightly raspy voice (S1) places a fresh loaf on the wooden counter and says: <d>[English] First batch of the morning.</d> [Shot 2] At 00:05.000, the camera cuts to a close-up of steam rising from the sliced bread while the baker's final words carry over from the previous shot.
-
-overall_soundscape: Wooden shutters scrape open, followed by the soft thud of a loaf on the counter and a faint hiss of steam. Distant early-morning traffic stays in the background.
-
-non_diegetic_music: A sparse acoustic guitar figure at a slow tempo, fading under the close-up.
+The woman in <Picture 1> is <Subject 1>. One complete outfit from <Picture 2> is <Subject 2>. The bedroom in <Picture 3> is <Subject 3>. The target image is a mid close-up, waist-up, eye-level photograph of <Subject 1> sitting on the edge of the bed in <Subject 3>, wearing <Subject 2>, torso upright, raising both hands in a peace sign, gaze toward the lens, and a faint smile. <Subject 1> is partially preserved; identity, face, hair, accessories, build, proportions, silhouette, shoulder width, and scale stay as in <Picture 1>, while her pose, clothing, and setting change. Do not slim, enlarge, beautify, or reshape her figure. <Subject 2> is partially preserved; cut, fabric, and colours stay, worn as a loosely fitted top with a very short skirt and ordinary cloth wrinkles rather than a stretched, tight fit. <Subject 3> is partially preserved; the room and the bed stay, framed as this waist-up mid close-up. Shot on an 85mm lens at f/1.8 in soft window light, with true-to-life colours, natural skin texture with visible pores, and realistic depth of field. Avoid beauty-filter smoothing, plastic or airbrushed skin, oversharpening, and HDR halos. The image contains no text, letters or numbers.
 ```
 
 ### Seedance 1.0
@@ -302,10 +305,10 @@ The window asks Rust to call the provider. The saved key stays in the Rust proce
 
 1. Trims the idea and rejects an empty idea or one longer than 8,000 characters.
 2. Loads `{id}.md` from the config templates folder (and writes the bundled copy if that file is missing).
-3. Checks duration: MiniMax H3 and Seedance 1.0 / 2.0 are 4–15 seconds, Seedance 2.5 is 4–30, and Wan and Seedream ignore duration.
-4. Renders the system prompt and a user message that names the target, the duration when there is one, and the rough idea. Protected keywords that appear in the idea, and any `{{double brace}}` terms, are appended to the system prompt.
+3. Checks duration: Seedance 1.0 / 2.0 are 4–15 seconds, Seedance 2.5 is 4–30, and Wan, MiniMax H3-Image, and Seedream ignore duration. A request that still names the removed `minimax-h3` id is rewritten with `minimax-h3-image-t2i`.
+4. Renders the system prompt and a user message that names the target, the duration when there is one, and the rough idea. Protected keywords that appear in the idea, and any `{{double brace}}` terms, are appended to the system prompt. For MiniMax H3-Image, action words from the idea are appended too. An edit also checks picture and subject labels after the reply.
 5. Builds a chat request and posts it. Timeout is 10 seconds to connect and 120 seconds overall. The user agent is `PromptRewriter/0.1`.
-6. Parses the reply, strips braces around inline protected terms, and checks that every required term is still present. If any are missing, it retries once with a corrective message. Terms that are still missing are returned as a warning.
+6. Parses the reply, strips braces around inline protected terms, and checks that every required term is still present. On H3-Image it also checks that each action word is still in the action sentence. If any are missing, it retries once with a corrective message. Terms that are still missing are returned as a warning. **Append missing terms** adds protected words and action words to the end of the prompt.
 7. Measures the result against the template caps, prepends a history entry, and returns the text.
 
 A line that starts with `/` never reaches this path. It is handled as a keyword command and written to `protected-keywords.txt` immediately.
@@ -334,7 +337,7 @@ A `settings.json` or `history.json` that does not parse is renamed to the same n
 
 ### Editing templates
 
-On first launch, each bundled file is copied into `templates/` if that name is not already there. Later launches leave your edits in place. An updated install does not overwrite a template you have already customized.
+On first launch, each bundled file is copied into `templates/` if that name is not already there. Later launches leave your edits in place. An updated install does not overwrite a template you have already customized. A launch also deletes `templates/minimax-h3.md` when that file is still there. It was the MiniMax H3 video target, which this version no longer ships. A `settings.json` whose default is `minimax-h3` is rewritten to `minimax-h3-image-t2i` the first time it loads.
 
 Change a live template in either place:
 
@@ -359,7 +362,7 @@ output: wan_pair       # wan_pair or text
 ---
 ```
 
-`max_chars_kind: model` labels the counter "limit" and the warning "model limit". `suggested` labels them "suggested" and "suggested length". None of the bundled files set `suggested`. Seedance and Seedream express their budget with `max_words` only. Crossing `max_chars` or `max_words` sets `overLimit`, adds a warning, and turns the count light red (`#ff9b9b`). Crossing 90% of `max_chars` turns it amber. The text is still kept.
+`max_chars_kind: model` labels the counter "limit" and the warning "model limit". `suggested` labels them "suggested" and "suggested length". MiniMax H3-Image sets `suggested` at 1,500 characters. Seedance and Seedream express their budget with `max_words` only. Crossing `max_chars` or `max_words` sets `overLimit`, adds a warning, and turns the count light red (`#ff9b9b`). Crossing 90% of `max_chars` turns it amber. The text is still kept.
 
 `{{duration}}` becomes the number of seconds. `{{duration_clock}}` becomes `00:SS.000` (seconds are capped at 59 in the clock string). Put the clock placeholder in the template yourself if you add a new file that needs it.
 
@@ -496,7 +499,7 @@ Start the server with `ollama serve` when the app reports that Ollama is not run
 | The provider rate-limited the request. | HTTP 429. |
 | Could not register `Ctrl+Shift+Space`. Another app may already own it. | The global shortcut is taken. Settings keeps the error. The tray still opens the window. Pick another chord and save. |
 | Write an idea before rewriting. / The idea is longer than 8,000 characters. | The idea box is empty, or past the cap (`maxlength` is 8000). |
-| Duration has to be a whole number from 4 to 15 seconds. | The overlay checks the duration box before the request. Seedance 2.5 uses 4 to 30. The Rust command reports `MiniMax H3 duration must be between 4 and 15 seconds (got N).` The duration box is hidden for Wan and Seedream. |
+| Duration has to be a whole number from 4 to 15 seconds. | The overlay checks the duration box before the request. Seedance 2.5 uses 4 to 30. The Rust command reports `Seedance duration must be between 4 and 15 seconds (got N).` The duration box is hidden for Wan, MiniMax H3-Image, and Seedream. |
 | Could not split a positive and negative prompt. | The Wan reply was not JSON and had no POSITIVE / NEGATIVE markers. The raw text is in the positive box. |
 | `wan22-t2v.md: frontmatter …` | That template file failed to parse. The banner lists invalid files. Fix it or use Reset to default. |
 | The prompt is N characters, over the 800 character model limit. | Shown under the result. The count is light red. The text is still there and still saved. A word warning uses the same pattern ("over the 1000 word model limit"). |
@@ -511,7 +514,7 @@ If Settings suddenly returns to defaults, look for `settings.json.bak` in the co
 - The overlay does not upload reference images, first frames, or audio. Image-to-video and edit templates tell the model that the picture already exists and to describe motion or the change only. `@Image 1` in a Seedance prompt is an instruction for the generator UI, not an upload from this app.
 - Closing the window, Esc, and Hide all hide to the tray. The process keeps running until **Quit** on the tray menu.
 - The global hotkey can fail when another app owns the chord. A press is also ignored if it repeats within 350 ms.
-- H3 and Seedance 1.0 / 2.0 durations are whole seconds from 4 to 15. Seedance 2.5 allows 4 to 30. Wan and Seedream have no duration control.
+- Seedance 1.0 / 2.0 durations are whole seconds from 4 to 15. Seedance 2.5 allows 4 to 30. Wan, MiniMax H3-Image, and Seedream have no duration control.
 - History is the last 50 rewrites on this machine, in `history.json`. There is no account sync.
 - A result that crosses a cap is still shown, copied, and stored. The app does not truncate it to the limit.
 - The Windows installers from a local build and from GitHub Actions are unsigned.
@@ -531,12 +534,13 @@ If Settings suddenly returns to defaults, look for `settings.json.bak` in the co
 │   │   ├── history.rs              # last-50 list
 │   │   ├── http.rs                 # OpenRouter and Ollama client
 │   │   ├── parse.rs                # Wan JSON / markers, length checks
+│   │   ├── actions.rs              # H3-Image action words that must survive the rewrite
 │   │   ├── protect.rs              # protected keywords, braces, slash commands
 │   │   ├── redact.rs               # strip secrets from errors
 │   │   ├── secret_file.rs          # private-file fallback, mode 0600
 │   │   ├── settings.rs             # defaults and temperature clamp
 │   │   └── template.rs             # frontmatter, duration, bundled files
-│   └── templates/                  # eight markdown templates compiled into the binary
+│   └── templates/                  # nine markdown templates compiled into the binary
 ├── docs/prompt-research.md         # source research for those templates
 ├── index.html                      # overlay layout
 ├── package.json                    # npm test, npm run build, tauri scripts
